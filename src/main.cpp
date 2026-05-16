@@ -4,41 +4,31 @@
 #include "gui/MainWindow.hpp"
 #include "service/AudioService.hpp"
 
+#include <QCoreApplication>
+#include <QDebug>
 #include <QFile>
 #include <QTextStream>
-#include <QDebug>
-#include <QDir>
 
-
-int main(int argc, char *argv[])
-{
+int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
 
   PipeWireBackend backend;
   AudioService audioService(backend);
   audioService.initialize();
-  QFile styleFile("../src/gui/styleDark.qss");
 
-  if (!styleFile.exists())
-  {
+  QFile styleFile(QCoreApplication::applicationDirPath() +
+                  "/../src/gui/styleDark.qss");
+
+  if (!styleFile.exists()) {
     qWarning() << "QSS file does not exist:" << styleFile.fileName();
-  }
-  else if (!styleFile.open(QFile::ReadOnly | QFile::Text))
-  {
+  } else if (!styleFile.open(QFile::ReadOnly | QFile::Text)) {
     qWarning() << "Failed to open QSS file:" << styleFile.errorString();
-  }
-  else
-  {
+  } else {
     QTextStream stream(&styleFile);
     app.setStyleSheet(stream.readAll());
     qDebug() << "Loaded QSS:" << styleFile.fileName();
   }
 
-  if (styleFile.open(QFile::ReadOnly | QFile::Text))
-  {
-    QTextStream stream(&styleFile);
-    app.setStyleSheet(stream.readAll());
-  }
   MainWindow window(audioService);
   window.show();
 

@@ -1,11 +1,11 @@
 #pragma once
 #include <QMainWindow>
-#include <queue>
-#include "components/EnhancementToggle.hpp"
+#include <QString>
 
-class QPushButton;
-class QComboBox;
-class QLabel;
+class DeviceSelector;
+class EnhancementToggle;
+class PresetSelector;
+class StatusIndicator;
 
 #include "../presets/Preset.hpp"
 #include "../service/AudioService.hpp"
@@ -18,16 +18,14 @@ private:
   void setupUi();
   void loadDevices();
   void setupConnections();
+  void setEnhancementActive(bool active, const QString &message);
 
   Preset createGamingPreset() const;
 
 private:
   AudioService &audioService;
-  QLabel *statusLabel = nullptr;
-  QComboBox *deviceComboBox = nullptr;
-  QComboBox *presetComboBox = nullptr;
-  QPushButton *enableButton = nullptr;
-  QPushButton *disableButton = nullptr;
-  QPushButton *applyPresetButton = nullptr;
+  DeviceSelector *deviceSelector = nullptr;
   EnhancementToggle *enhancementToggle = nullptr;
+  PresetSelector *presetSelector = nullptr;
+  StatusIndicator *statusIndicator = nullptr;
 };

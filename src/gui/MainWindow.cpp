@@ -1,6 +1,14 @@
 #include "MainWindow.hpp"
 
+#include "components/CardContainer.hpp"
+#include "components/DeviceSelector.hpp"
+#include "components/EnhancementToggle.hpp"
+#include "components/EqualizerPanel.hpp"
+#include "components/PresetSelector.hpp"
+#include "components/StatusIndicator.hpp"
+
 #include <QComboBox>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QPushButton>
 #include <QVBoxLayout>
@@ -15,75 +23,130 @@ MainWindow::MainWindow(AudioService &audioService, QWidget *parent)
 
 void MainWindow::setupUi() {
   auto *central = new QWidget(this);
-  auto *layout = new QVBoxLayout(central);
+  central->setObjectName("appRoot");
 
-  statusLabel = new QLabel("Bazzite Sound ready", this);
+  auto *pageLayout = new QVBoxLayout(central);
+  pageLayout->setContentsMargins(32, 28, 32, 24);
+  pageLayout->setSpacing(20);
 
-  deviceComboBox = new QComboBox(this);
-  presetComboBox = new QComboBox(this);
+  auto *headerLayout = new QHBoxLayout();
+  headerLayout->setSpacing(16);
 
-  enableButton = new QPushButton("Enable Enhancement", this);
-  disableButton = new QPushButton("Disable Enhancement", this);
-  applyPresetButton = new QPushButton("Apply Preset", this);
+  auto *brandMark = new QLabel("PF", this);
+  brandMark->setObjectName("brandMark");
+  brandMark->setAlignment(Qt::AlignCenter);
+
+  auto *titleStack = new QVBoxLayout();
+  titleStack->setSpacing(4);
+
+  auto *titleLabel = new QLabel("PulseForge", this);
+  titleLabel->setObjectName("appTitle");
+
+  auto *subtitleLabel =
+      new QLabel("Lightweight PipeWire sound enhancement for Linux", this);
+  subtitleLabel->setObjectName("appSubtitle");
+
+  titleStack->addWidget(titleLabel);
+  titleStack->addWidget(subtitleLabel);
+
+  headerLayout->addWidget(brandMark);
+  headerLayout->addLayout(titleStack);
+  headerLayout->addStretch();
+
+  auto *contentLayout = new QHBoxLayout();
+  contentLayout->setSpacing(20);
+
+  auto *sideColumn = new QVBoxLayout();
+  sideColumn->setSpacing(16);
+
+  auto *deviceCard =
+      new CardContainer("Output", "Choose where enhanced audio should play.",
+                        this);
+  deviceSelector = new DeviceSelector(this);
+  deviceCard->contentLayout()->addWidget(deviceSelector);
+
+  auto *presetCard =
+      new CardContainer("Preset", "Simple profiles without extra clutter.",
+                        this);
+  presetSelector = new PresetSelector(this);
+  presetSelector->addPreset("Gaming clarity", "gaming");
+  presetCard->contentLayout()->addWidget(presetSelector);
+
+  statusIndicator = new StatusIndicator(this);
+  statusIndicator->setMessage("Ready. Enhancement is currently bypassed.");
+
+  sideColumn->addWidget(deviceCard);
+  sideColumn->addWidget(presetCard);
+  sideColumn->addStretch();
+
+  auto *mainColumn = new QVBoxLayout();
+  mainColumn->setSpacing(16);
+
   enhancementToggle = new EnhancementToggle(this);
+  auto *equalizerPanel = new EqualizerPanel(this);
 
-  presetComboBox->addItem("Gaming", "gaming");
+  mainColumn->addWidget(enhancementToggle);
+  mainColumn->addWidget(equalizerPanel);
+  mainColumn->addStretch();
 
-  layout->addWidget(enhancementToggle);
-  layout->addWidget(statusLabel);
-  layout->addWidget(deviceComboBox);
-  layout->addWidget(presetComboBox);
-  layout->addWidget(enableButton);
-  layout->addWidget(disableButton);
-  layout->addWidget(applyPresetButton);
+  contentLayout->addLayout(sideColumn, 2);
+  contentLayout->addLayout(mainColumn, 5);
+
+  pageLayout->addLayout(headerLayout);
+  pageLayout->addLayout(contentLayout, 1);
+  pageLayout->addWidget(statusIndicator);
 
   setCentralWidget(central);
-  setWindowTitle("Bazzite Sound");
-  resize(420, 260);
+  setWindowTitle("PulseForge");
+  setMinimumSize(920, 600);
+  resize(1040, 640);
 }
 
 void MainWindow::loadDevices() {
-  auto devices = audioService.getOutputDevices();
-
-  for (const auto &device : devices) {
-    deviceComboBox->addItem(QString::fromStdString(device.name),
-                            QString::fromStdString(device.id));
-  }
+  deviceSelector->setDevices(audioService.getOutputDevices());
 }
 
 void MainWindow::setupConnections() {
-  connect(enableButton, &QPushButton::clicked, this, [this]() {
-    audioService.enableEnhancement();
-    statusLabel->setText("Enhancement enabled");
-  });
+  connect(deviceSelector->comboBox(),
+          QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          [this]() {
+            const auto deviceId = deviceSelector->currentDeviceId();
+            if (deviceId.empty()) {
+              return;
+            }
 
-  connect(disableButton, &QPushButton::clicked, this, [this]() {
-    audioService.disableEnhancement();
-    statusLabel->setText("Enhancement disabled");
-  });
+            audioService.selectOutputDevice(deviceId);
+            statusIndicator->setMessage("Output device updated.");
+          });
 
-  connect(deviceComboBox, &QComboBox::currentIndexChanged, this, [this]() {
-    auto deviceId = deviceComboBox->currentData().toString().toStdString();
-    audioService.selectOutputDevice(deviceId);
-    statusLabel->setText("Selected output device");
-  });
+  connect(presetSelector->comboBox(),
+          QOverload<int>::of(&QComboBox::currentIndexChanged), this,
+          [this]() {
+            audioService.applyPreset(createGamingPreset());
+            statusIndicator->setMessage("Gaming clarity preset selected.");
+          });
 
-  connect(applyPresetButton, &QPushButton::clicked, this, [this]() {
-    auto preset = createGamingPreset();
-    audioService.applyPreset(preset);
-    statusLabel->setText("Gaming preset applied");
-  });
   connect(enhancementToggle->button(), &QPushButton::clicked, this, [this]() {
-  if (audioService.isEnabled()) {
-    if (audioService.disableEnhancement()) {
-      enhancementToggle->setEnabledState(false);
+    if (audioService.isEnabled()) {
+      if (audioService.disableEnhancement()) {
+        setEnhancementActive(false, "Enhancement disabled. Audio is bypassed.");
+      }
+      return;
     }
-  } else {
+
+    audioService.applyPreset(createGamingPreset());
+
     if (audioService.enableEnhancement()) {
-      enhancementToggle->setEnabledState(true);
+      setEnhancementActive(
+          true, "Enhancement enabled. PulseForge is processing audio.");
     }
-  }
-});
+  });
+}
+
+void MainWindow::setEnhancementActive(bool active, const QString &message) {
+  enhancementToggle->setEnabledState(active);
+  statusIndicator->setActive(active);
+  statusIndicator->setMessage(message);
 }
 
 Preset MainWindow::createGamingPreset() const {

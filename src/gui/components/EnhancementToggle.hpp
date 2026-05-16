@@ -5,16 +5,18 @@
 class QLabel;
 class QPushButton;
 
-class EnhancementToggle: public QWidget{
+class EnhancementToggle : public QWidget {
 public:
   explicit EnhancementToggle(QWidget *parent = nullptr);
 
   void setEnabledState(bool enabled);
+  bool isEnabledState() const;
 
-  QPushButton* button() const;
+  QPushButton *button() const;
 
-  private:
-    QLabel* titleLabel=nullptr;
-    QLabel* statusLabel=nullptr;
-    QPushButton* toggleButton=nullptr;
+private:
+  QLabel *titleLabel = nullptr;
+  QLabel *statusLabel = nullptr;
+  QPushButton *toggleButton = nullptr;
+  bool enabledState = false;
 };

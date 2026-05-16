@@ -15,7 +15,12 @@ add_executable(bazzite-sound
     src/main.cpp
     src/service/AudioService.cpp
     src/gui/MainWindow.cpp
+    src/gui/components/CardContainer.cpp
+    src/gui/components/DeviceSelector.cpp
     src/gui/components/EnhancementToggle.cpp
+    src/gui/components/EqualizerPanel.cpp
+    src/gui/components/PresetSelector.cpp
+    src/gui/components/StatusIndicator.cpp
     src/audio/PipeWireBackend.cpp
 )
 
@@ -29,5 +34,4 @@ target_link_libraries(bazzite-sound PRIVATE
 )
 
 target_compile_options(bazzite-sound PRIVATE ${PIPEWIRE_CFLAGS_OTHER})
-
 
