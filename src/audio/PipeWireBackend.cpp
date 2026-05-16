@@ -12,6 +12,9 @@
 #include <cstring>
 #include <filesystem>
 #include <fstream>
+#include <fcntl.h>
+#include <poll.h>
+#include <signal.h>
 #include <sstream>
 #include <string>
 #include <sys/wait.h>
@@ -63,9 +66,11 @@ std::string resolveExecutable(const std::string &name) {
 struct ProcessResult {
   int exitCode = -1;
   std::string output;
+  bool timedOut = false;
 };
 
-ProcessResult runProcess(const std::vector<std::string> &arguments) {
+ProcessResult runProcess(const std::vector<std::string> &arguments,
+                         int timeoutMs = 3000) {
   ProcessResult result;
   if (arguments.empty()) {
     Logger::error("Cannot run an empty process command.");
@@ -112,19 +117,55 @@ ProcessResult runProcess(const std::vector<std::string> &arguments) {
   }
 
   close(pipeFds[1]);
+  fcntl(pipeFds[0], F_SETFL, fcntl(pipeFds[0], F_GETFL, 0) | O_NONBLOCK);
 
   std::array<char, 512> buffer{};
+  int status = 0;
+  int elapsedMs = 0;
+  constexpr int pollStepMs = 50;
+
+  while (true) {
+    ssize_t bytesRead = 0;
+    while ((bytesRead = read(pipeFds[0], buffer.data(), buffer.size())) > 0) {
+      result.output.append(buffer.data(), static_cast<std::size_t>(bytesRead));
+    }
+
+    const pid_t waitResult = waitpid(pid, &status, WNOHANG);
+    if (waitResult == pid) {
+      break;
+    }
+    if (waitResult == -1) {
+      result.output += "waitpid failed: " + std::string(std::strerror(errno));
+      break;
+    }
+
+    if (elapsedMs >= timeoutMs) {
+      result.timedOut = true;
+      result.output += "Process timed out after " + std::to_string(timeoutMs) +
+                       " ms.";
+      Logger::warn("Timed out waiting for process: " + arguments.front());
+      kill(pid, SIGKILL);
+      waitpid(pid, &status, 0);
+      break;
+    }
+
+    pollfd readFd{};
+    readFd.fd = pipeFds[0];
+    readFd.events = POLLIN;
+    poll(&readFd, 1, pollStepMs);
+    elapsedMs += pollStepMs;
+  }
+
   ssize_t bytesRead = 0;
   while ((bytesRead = read(pipeFds[0], buffer.data(), buffer.size())) > 0) {
     result.output.append(buffer.data(), static_cast<std::size_t>(bytesRead));
   }
   close(pipeFds[0]);
 
-  int status = 0;
-  waitpid(pid, &status, 0);
-
   if (WIFEXITED(status)) {
     result.exitCode = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    result.exitCode = 128 + WTERMSIG(status);
   }
 
   return result;
@@ -791,29 +832,43 @@ bool PipeWireBackend::connectFilterOutputToTargetSink() const {
                      selectedSinkName + ":playback_FR")};
 
   for (const auto &[source, destination] : stereoLinks) {
-    const ProcessResult link = runProcess({"pw-link", "-w", source, destination});
-    const std::string output = trim(link.output);
+    bool linked = false;
+    std::string lastOutput;
 
-    if (link.exitCode == 0) {
-      Logger::info("Linked " + source + " -> " + destination);
-      continue;
+    for (int attempt = 0; attempt < 6; ++attempt) {
+      const ProcessResult link = runProcess({"pw-link", source, destination}, 250);
+      const std::string output = trim(link.output);
+      lastOutput = output;
+
+      if (link.exitCode == 0) {
+        Logger::info("Linked " + source + " -> " + destination);
+        linked = true;
+        break;
+      }
+
+      if (output.find("File exists") != std::string::npos ||
+          output.find("already linked") != std::string::npos) {
+        Logger::info("PipeWire link already exists: " + source + " -> " +
+                     destination);
+        linked = true;
+        break;
+      }
+
+      if (link.exitCode == 127) {
+        Logger::warn(
+            "pw-link is not available; relying on the session manager to connect PulseForge to the selected sink.");
+        return true;
+      }
+
+      usleep(75000);
     }
 
-    if (output.find("File exists") != std::string::npos ||
-        output.find("already linked") != std::string::npos) {
-      Logger::info("PipeWire link already exists: " + source + " -> " +
-                   destination);
+    if (linked) {
       continue;
-    }
-
-    if (link.exitCode == 127) {
-      Logger::warn(
-          "pw-link is not available; relying on the session manager to connect PulseForge to the selected sink.");
-      return true;
     }
 
     Logger::error("Failed to link " + source + " -> " + destination +
-                  ". Output: " + output);
+                  ". Output: " + lastOutput);
     return false;
   }
 

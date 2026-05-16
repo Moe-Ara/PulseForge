@@ -14,10 +14,13 @@
 #include <QInputDialog>
 #include <QLabel>
 #include <QLineEdit>
+#include <QMetaObject>
 #include <QMessageBox>
+#include <QPointer>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <thread>
 #include <vector>
 
 MainWindow::MainWindow(AudioService &audioService, QWidget *parent)
@@ -180,19 +183,56 @@ void MainWindow::setupConnections() {
   });
 
   connect(enhancementToggle->button(), &QPushButton::clicked, this, [this]() {
+    enhancementToggle->button()->setEnabled(false);
+    QPointer<MainWindow> self(this);
+    AudioService *service = &audioService;
+
     if (audioService.isEnabled()) {
-      if (audioService.disableEnhancement()) {
-        setEnhancementActive(false, "Enhancement disabled. Audio is bypassed.");
-      }
+      std::thread([self, service]() {
+        const bool disabled = service->disableEnhancement();
+        if (!self) {
+          return;
+        }
+        QMetaObject::invokeMethod(self, [self, disabled]() {
+          if (!self) {
+            return;
+          }
+          self->enhancementToggle->button()->setEnabled(true);
+          if (disabled) {
+            self->setEnhancementActive(
+                false, "Enhancement disabled. Audio is bypassed.");
+          } else {
+            self->statusIndicator->setMessage(
+                "PulseForge could not disable enhancement.");
+          }
+        });
+      }).detach();
       return;
     }
 
-    audioService.applyPreset(PresetFactory::equalizer(equalizerPanel->gains()));
+    const std::vector<float> gains = equalizerPanel->gains();
+    statusIndicator->setMessage("Enabling enhancement...");
 
-    if (audioService.enableEnhancement()) {
-      setEnhancementActive(
-          true, "Enhancement enabled. PulseForge is processing audio.");
-    }
+    std::thread([self, service, gains]() {
+      service->applyPreset(PresetFactory::equalizer(gains));
+      const bool enabled = service->enableEnhancement();
+      if (!self) {
+        return;
+      }
+      QMetaObject::invokeMethod(self, [self, enabled]() {
+        if (!self) {
+          return;
+        }
+        self->enhancementToggle->button()->setEnabled(true);
+        if (enabled) {
+          self->setEnhancementActive(
+              true, "Enhancement enabled. PulseForge is processing audio.");
+        } else {
+          self->setEnhancementActive(false,
+                                     "PulseForge could not enable enhancement.");
+        }
+      });
+    }).detach();
   });
 }
 
