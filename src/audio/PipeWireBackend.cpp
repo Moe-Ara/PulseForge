@@ -486,6 +486,9 @@ bool PipeWireBackend::createOrReloadFilterSink() {
   if (filterModuleId != -1 && !removeFilterSink()) {
     return false;
   }
+  if (pipeWireModuleId != -1 && !removeFilterSink()) {
+    return false;
+  }
   if (filterProcessId != -1 && !removeFilterSink()) {
     return false;
   }
@@ -500,7 +503,8 @@ bool PipeWireBackend::createOrReloadFilterSink() {
     return false;
   }
 
-  if (!createFilterSinkWithPactl() && !createFilterSinkWithPipeWireDaemon()) {
+  if (!createFilterSinkWithPactl() && !createFilterSinkWithPwCli() &&
+      !createFilterSinkWithPipeWireDaemon()) {
     if (wasEnabled) {
       restorePreviousDefaultSink();
     }
@@ -594,6 +598,55 @@ bool PipeWireBackend::createFilterSinkWithPactl() {
   return true;
 }
 
+bool PipeWireBackend::createFilterSinkWithPwCli() {
+  const std::string moduleArgs = buildNativeFilterChainModuleArgs();
+  Logger::info("Loading native PipeWire filter-chain through pw-cli.");
+
+  const ProcessResult loadResult =
+      runProcess({"pw-cli", "load-module", "libpipewire-module-filter-chain",
+                  moduleArgs},
+                 3000);
+  if (loadResult.exitCode != 0) {
+    Logger::error("Failed to load native PipeWire filter-chain with pw-cli. Output: " +
+                  trim(loadResult.output));
+    return false;
+  }
+
+  const std::string output = trim(loadResult.output);
+  Logger::info("pw-cli filter-chain load output: " + output);
+
+  std::istringstream stream(output);
+  std::string token;
+  while (stream >> token) {
+    try {
+      std::size_t parsed = 0;
+      const int value = std::stoi(token, &parsed);
+      if (parsed == token.size()) {
+        pipeWireModuleId = value;
+        break;
+      }
+    } catch (...) {
+    }
+  }
+
+  if (pipeWireModuleId == -1) {
+    Logger::warn(
+        "Could not parse a PipeWire module id from pw-cli output; cleanup will rely on process/session cleanup.");
+  } else {
+    Logger::info("PipeWire filter-chain module object ID: " +
+                 std::to_string(pipeWireModuleId));
+  }
+
+  if (!waitForProcessingSink()) {
+    Logger::error(
+        "pw-cli loaded libpipewire-module-filter-chain, but the PulseForge sink did not appear.");
+    removeFilterSink();
+    return false;
+  }
+
+  return saveRuntimeState();
+}
+
 bool PipeWireBackend::createFilterSinkWithPipeWireDaemon() {
   if (!writeFilterChainDaemonConfig()) {
     return false;
@@ -629,7 +682,7 @@ bool PipeWireBackend::createFilterSinkWithPipeWireDaemon() {
 }
 
 bool PipeWireBackend::removeFilterSink() {
-  if (filterModuleId == -1 && filterProcessId == -1) {
+  if (filterModuleId == -1 && pipeWireModuleId == -1 && filterProcessId == -1) {
     return true;
   }
 
@@ -642,6 +695,17 @@ bool PipeWireBackend::removeFilterSink() {
     Logger::info("Removed filter-chain module with ID: " +
                  std::to_string(filterModuleId));
     filterModuleId = -1;
+  }
+
+  if (pipeWireModuleId != -1) {
+    if (!runProcessChecked({"pw-cli", "destroy", std::to_string(pipeWireModuleId)},
+                           "Failed to destroy native PipeWire filter-chain module.")) {
+      return false;
+    }
+
+    Logger::info("Destroyed PipeWire filter-chain module object: " +
+                 std::to_string(pipeWireModuleId));
+    pipeWireModuleId = -1;
   }
 
   if (!removeFilterChainDaemon()) {
@@ -683,6 +747,7 @@ bool PipeWireBackend::cleanupStaleFilterSink() {
   }
 
   int staleModuleId = -1;
+  int stalePipeWireModuleId = -1;
   int staleProcessId = -1;
   std::string line;
   while (std::getline(state, line)) {
@@ -691,6 +756,12 @@ bool PipeWireBackend::cleanupStaleFilterSink() {
         staleModuleId = std::stoi(line.substr(7));
       } catch (...) {
         staleModuleId = -1;
+      }
+    } else if (line.rfind("pipewire_module=", 0) == 0) {
+      try {
+        stalePipeWireModuleId = std::stoi(line.substr(16));
+      } catch (...) {
+        stalePipeWireModuleId = -1;
       }
     } else if (line.rfind("process=", 0) == 0) {
       try {
@@ -702,6 +773,17 @@ bool PipeWireBackend::cleanupStaleFilterSink() {
   }
 
   bool cleaned = true;
+
+  if (stalePipeWireModuleId != -1) {
+    if (!runProcessChecked({"pw-cli", "destroy",
+                            std::to_string(stalePipeWireModuleId)},
+                           "Failed to remove stale native PipeWire filter-chain module.")) {
+      cleaned = false;
+    } else {
+      Logger::info("Removed stale native PipeWire filter-chain module: " +
+                   std::to_string(stalePipeWireModuleId));
+    }
+  }
 
   if (staleProcessId != -1) {
     const int killResult = kill(static_cast<pid_t>(staleProcessId), SIGTERM);
@@ -763,6 +845,7 @@ bool PipeWireBackend::saveRuntimeState() const {
   }
 
   state << "module=" << filterModuleId << '\n';
+  state << "pipewire_module=" << pipeWireModuleId << '\n';
   state << "process=" << filterProcessId << '\n';
   state << "previous_default=" << previousDefaultSinkName << '\n';
   state << "processing_sink=" << virtualSinkName << '\n';
@@ -857,11 +940,17 @@ bool PipeWireBackend::targetSinkIsVisibleToPactl() const {
 }
 
 bool PipeWireBackend::connectFilterOutputToTargetSink() const {
+  const std::vector<std::string> outputPorts = filterOutputPorts();
+  if (outputPorts.size() < 2) {
+    Logger::error("PulseForge filter-chain output ports did not appear.");
+    Logger::warn("Available PipeWire output ports: " +
+                 trim(runProcess({"pw-link", "-o"}, 500).output));
+    return false;
+  }
+
   const std::array<std::pair<std::string, std::string>, 2> stereoLinks = {
-      std::make_pair(filterOutputNodeName + ":output_FL",
-                     selectedSinkName + ":playback_FL"),
-      std::make_pair(filterOutputNodeName + ":output_FR",
-                     selectedSinkName + ":playback_FR")};
+      std::make_pair(outputPorts[0], selectedSinkName + ":playback_FL"),
+      std::make_pair(outputPorts[1], selectedSinkName + ":playback_FR")};
 
   for (const auto &[source, destination] : stereoLinks) {
     bool linked = false;
@@ -909,6 +998,75 @@ bool PipeWireBackend::connectFilterOutputToTargetSink() const {
   }
 
   return true;
+}
+
+std::vector<std::string> PipeWireBackend::filterOutputPorts() const {
+  for (int attempt = 0; attempt < 20; ++attempt) {
+    const ProcessResult ports = runProcess({"pw-link", "-o"}, 500);
+    if (ports.exitCode == 0) {
+      std::vector<std::string> matches;
+      std::istringstream lines(ports.output);
+      std::string line;
+      while (std::getline(lines, line)) {
+        line = trim(line);
+        if (line.empty()) {
+          continue;
+        }
+
+        const bool belongsToFilter =
+            line.rfind(filterOutputNodeName + ":", 0) == 0 ||
+            line.rfind(virtualSinkName + ":", 0) == 0;
+        const bool isAudioOutput =
+            line.find(":output_FL") != std::string::npos ||
+            line.find(":output_FR") != std::string::npos ||
+            line.find(":monitor_FL") != std::string::npos ||
+            line.find(":monitor_FR") != std::string::npos;
+
+        if (belongsToFilter && isAudioOutput) {
+          matches.push_back(line);
+        }
+      }
+
+      std::vector<std::string> ordered;
+      for (const auto &port : matches) {
+        if (port.find(":output_FL") != std::string::npos) {
+          ordered.push_back(port);
+          break;
+        }
+      }
+      for (const auto &port : matches) {
+        if (port.find(":output_FR") != std::string::npos) {
+          ordered.push_back(port);
+          break;
+        }
+      }
+      if (ordered.size() < 2) {
+        ordered.clear();
+        for (const auto &port : matches) {
+          if (port.find(":monitor_FL") != std::string::npos) {
+            ordered.push_back(port);
+            break;
+          }
+        }
+        for (const auto &port : matches) {
+          if (port.find(":monitor_FR") != std::string::npos) {
+            ordered.push_back(port);
+            break;
+          }
+        }
+      }
+
+      if (ordered.size() >= 2) {
+        Logger::info("Resolved PulseForge output ports: " + ordered[0] +
+                     ", " + ordered[1]);
+        return ordered;
+      }
+    }
+
+    usleep(100000);
+  }
+
+  return {};
 }
 
 bool PipeWireBackend::waitForProcessingSink() const {
@@ -972,6 +1130,19 @@ std::string PipeWireBackend::buildFilterChainModuleArgsForLog() const {
     args << argument.substr(0, separator + 1)
          << shellQuote(argument.substr(separator + 1));
   }
+
+  return args.str();
+}
+
+std::string PipeWireBackend::buildNativeFilterChainModuleArgs() const {
+  std::ostringstream args;
+  args << "{ "
+       << "node.description = \"" << virtualSinkDisplayName << "\" "
+       << "media.name = \"" << virtualSinkDisplayName << "\" "
+       << "filter.graph = " << buildFilterGraphArgs() << " "
+       << "capture.props = " << buildCapturePropsArgs() << " "
+       << "playback.props = " << buildPlaybackPropsArgs() << " "
+       << "}";
 
   return args.str();
 }
