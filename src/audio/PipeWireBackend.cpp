@@ -2,7 +2,6 @@
 
 #include "../core/Logger.hpp"
 
-#include <pipewire/impl-module.h>
 #include <pipewire/keys.h>
 #include <pipewire/pipewire.h>
 #include <spa/utils/string.h>
@@ -487,7 +486,7 @@ bool PipeWireBackend::createOrReloadFilterSink() {
   if (filterModuleId != -1 && !removeFilterSink()) {
     return false;
   }
-  if (nativeFilterModule && !removeFilterSink()) {
+  if (filterProcessId != -1 && !removeFilterSink()) {
     return false;
   }
 
@@ -501,7 +500,7 @@ bool PipeWireBackend::createOrReloadFilterSink() {
     return false;
   }
 
-  if (!createFilterSinkWithPactl() && !createFilterSinkWithNativePipeWireModule()) {
+  if (!createFilterSinkWithPactl() && !createFilterSinkWithPipeWireDaemon()) {
     if (wasEnabled) {
       restorePreviousDefaultSink();
     }
@@ -562,7 +561,7 @@ bool PipeWireBackend::createFilterSinkWithPactl() {
       Logger::error(
           "pactl reported 'No such entity'. If the target sink above is visible, this usually means the PulseAudio/PipeWire Pulse server does not expose module-filter-chain. PulseForge needs that module for the pactl-based lifecycle.");
       Logger::warn(
-          "Falling back to an in-process native PipeWire filter-chain module for this session.");
+          "Falling back to a native PipeWire filter-chain daemon for this session.");
     }
     return false;
   }
@@ -595,32 +594,34 @@ bool PipeWireBackend::createFilterSinkWithPactl() {
   return true;
 }
 
-bool PipeWireBackend::createFilterSinkWithNativePipeWireModule() {
-  if (!context) {
-    Logger::error("Cannot load native PipeWire filter-chain module without a PipeWire context.");
+bool PipeWireBackend::createFilterSinkWithPipeWireDaemon() {
+  if (!writeFilterChainDaemonConfig()) {
     return false;
   }
 
-  const std::string moduleArgs = buildNativeFilterChainModuleArgs();
-  Logger::info("Loading native PipeWire filter-chain module with args: " +
-               moduleArgs);
-
-  stopLoopThread();
-  nativeFilterModule = pw_context_load_module(
-      context, "libpipewire-module-filter-chain", moduleArgs.c_str(), nullptr);
-  if (!nativeFilterModule) {
-    startLoopThread();
-    Logger::error(
-        "Failed to load native libpipewire-module-filter-chain. Make sure the PipeWire filter-chain module is installed.");
+  const pid_t pid = fork();
+  if (pid == -1) {
+    Logger::error("Failed to fork PipeWire filter-chain daemon: " +
+                  std::string(std::strerror(errno)));
     return false;
   }
-  startLoopThread();
 
-  Logger::info("Loaded native PipeWire filter-chain module in PulseForge.");
+  if (pid == 0) {
+    const std::string executable = resolveExecutable("pipewire");
+    const std::string configPath = filterChainConfigPath();
+    execlp(executable.c_str(), executable.c_str(), "-c", configPath.c_str(),
+           static_cast<char *>(nullptr));
+    _exit(127);
+  }
+
+  filterProcessId = static_cast<int>(pid);
+  Logger::info("Started native PipeWire filter-chain daemon with PID: " +
+               std::to_string(filterProcessId));
+
   if (!waitForProcessingSink()) {
     Logger::error(
-        "Native PipeWire filter-chain module loaded, but the PulseForge sink did not appear.");
-    removeNativeFilterModule();
+        "Native PipeWire filter-chain daemon started, but the PulseForge sink did not appear.");
+    removeFilterChainDaemon();
     return false;
   }
 
@@ -628,7 +629,7 @@ bool PipeWireBackend::createFilterSinkWithNativePipeWireModule() {
 }
 
 bool PipeWireBackend::removeFilterSink() {
-  if (filterModuleId == -1 && !nativeFilterModule) {
+  if (filterModuleId == -1 && filterProcessId == -1) {
     return true;
   }
 
@@ -643,7 +644,7 @@ bool PipeWireBackend::removeFilterSink() {
     filterModuleId = -1;
   }
 
-  if (!removeNativeFilterModule()) {
+  if (!removeFilterChainDaemon()) {
     return false;
   }
 
@@ -651,16 +652,27 @@ bool PipeWireBackend::removeFilterSink() {
   return true;
 }
 
-bool PipeWireBackend::removeNativeFilterModule() {
-  if (!nativeFilterModule) {
+bool PipeWireBackend::removeFilterChainDaemon() {
+  if (filterProcessId == -1) {
     return true;
   }
 
-  stopLoopThread();
-  pw_impl_module_destroy(nativeFilterModule);
-  nativeFilterModule = nullptr;
-  startLoopThread();
-  Logger::info("Destroyed native PipeWire filter-chain module.");
+  const int stoppedPid = filterProcessId;
+  const int killResult = kill(static_cast<pid_t>(stoppedPid), SIGTERM);
+  if (killResult != 0 && errno != ESRCH) {
+    Logger::error("Failed to stop PipeWire filter-chain daemon: " +
+                  std::string(std::strerror(errno)));
+    return false;
+  }
+
+  if (killResult == 0) {
+    int status = 0;
+    waitpid(static_cast<pid_t>(stoppedPid), &status, 0);
+  }
+
+  Logger::info("Stopped PipeWire filter-chain daemon with PID: " +
+               std::to_string(stoppedPid));
+  filterProcessId = -1;
   return true;
 }
 
@@ -671,6 +683,7 @@ bool PipeWireBackend::cleanupStaleFilterSink() {
   }
 
   int staleModuleId = -1;
+  int staleProcessId = -1;
   std::string line;
   while (std::getline(state, line)) {
     if (line.rfind("module=", 0) == 0) {
@@ -679,10 +692,28 @@ bool PipeWireBackend::cleanupStaleFilterSink() {
       } catch (...) {
         staleModuleId = -1;
       }
+    } else if (line.rfind("process=", 0) == 0) {
+      try {
+        staleProcessId = std::stoi(line.substr(8));
+      } catch (...) {
+        staleProcessId = -1;
+      }
     }
   }
 
   bool cleaned = true;
+
+  if (staleProcessId != -1) {
+    const int killResult = kill(static_cast<pid_t>(staleProcessId), SIGTERM);
+    if (killResult != 0 && errno != ESRCH) {
+      Logger::warn("Failed to remove stale PulseForge filter-chain daemon: " +
+                   std::string(std::strerror(errno)));
+      cleaned = false;
+    } else {
+      Logger::info("Removed stale PulseForge filter-chain daemon: " +
+                   std::to_string(staleProcessId));
+    }
+  }
 
   if (staleModuleId == -1) {
     return clearRuntimeState() && cleaned;
@@ -732,6 +763,7 @@ bool PipeWireBackend::saveRuntimeState() const {
   }
 
   state << "module=" << filterModuleId << '\n';
+  state << "process=" << filterProcessId << '\n';
   state << "previous_default=" << previousDefaultSinkName << '\n';
   state << "processing_sink=" << virtualSinkName << '\n';
   return true;
@@ -869,6 +901,10 @@ bool PipeWireBackend::connectFilterOutputToTargetSink() const {
 
     Logger::error("Failed to link " + source + " -> " + destination +
                   ". Output: " + lastOutput);
+    Logger::warn("Available PipeWire output ports: " +
+                 trim(runProcess({"pw-link", "-o"}, 500).output));
+    Logger::warn("Available PipeWire input ports: " +
+                 trim(runProcess({"pw-link", "-i"}, 500).output));
     return false;
   }
 
@@ -877,7 +913,8 @@ bool PipeWireBackend::connectFilterOutputToTargetSink() const {
 
 bool PipeWireBackend::waitForProcessingSink() const {
   for (int attempt = 0; attempt < 20; ++attempt) {
-    const ProcessResult sinks = runProcess({"pactl", "list", "sinks", "short"});
+    const ProcessResult sinks =
+        runProcess({"pactl", "list", "sinks", "short"}, 500);
     if (sinks.exitCode == 0 && sinks.output.find(virtualSinkName) != std::string::npos) {
       return true;
     }
@@ -885,6 +922,28 @@ bool PipeWireBackend::waitForProcessingSink() const {
   }
 
   return false;
+}
+
+bool PipeWireBackend::writeFilterChainDaemonConfig() const {
+  const std::filesystem::path path(filterChainConfigPath());
+  std::error_code error;
+  std::filesystem::create_directories(path.parent_path(), error);
+  if (error) {
+    Logger::error("Failed to create PulseForge filter-chain config directory: " +
+                  error.message());
+    return false;
+  }
+
+  std::ofstream config(path);
+  if (!config.is_open()) {
+    Logger::error("Failed to write PipeWire filter-chain daemon config: " +
+                  path.string());
+    return false;
+  }
+
+  config << buildFilterChainDaemonConfig();
+  Logger::info("Wrote native PipeWire filter-chain config: " + path.string());
+  return true;
 }
 
 std::vector<std::string> PipeWireBackend::buildFilterChainModuleArgs() const {
@@ -917,17 +976,33 @@ std::string PipeWireBackend::buildFilterChainModuleArgsForLog() const {
   return args.str();
 }
 
-std::string PipeWireBackend::buildNativeFilterChainModuleArgs() const {
-  std::ostringstream args;
-  args << "{ "
-       << "node.description = \"" << virtualSinkDisplayName << "\" "
-       << "media.name = \"" << virtualSinkDisplayName << "\" "
-       << "filter.graph = " << buildFilterGraphArgs() << " "
-       << "capture.props = " << buildCapturePropsArgs() << " "
-       << "playback.props = " << buildPlaybackPropsArgs() << " "
-       << "}";
+std::string PipeWireBackend::buildFilterChainDaemonConfig() const {
+  std::ostringstream config;
+  config << "context.properties = {\n"
+         << "    log.level = 0\n"
+         << "}\n\n"
+         << "context.spa-libs = {\n"
+         << "    audio.convert.* = audioconvert/libspa-audioconvert\n"
+         << "    filter.graph = filter-graph/libspa-filter-graph\n"
+         << "    support.* = support/libspa-support\n"
+         << "}\n\n"
+         << "context.modules = [\n"
+         << "    { name = libpipewire-module-rt flags = [ ifexists nofail ] }\n"
+         << "    { name = libpipewire-module-protocol-native }\n"
+         << "    { name = libpipewire-module-client-node }\n"
+         << "    { name = libpipewire-module-adapter }\n"
+         << "    { name = libpipewire-module-filter-chain\n"
+         << "        args = {\n"
+         << "            node.description = \"" << virtualSinkDisplayName << "\"\n"
+         << "            media.name = \"" << virtualSinkDisplayName << "\"\n"
+         << "            filter.graph = " << buildFilterGraphArgs() << "\n"
+         << "            capture.props = " << buildCapturePropsArgs() << "\n"
+         << "            playback.props = " << buildPlaybackPropsArgs() << "\n"
+         << "        }\n"
+         << "    }\n"
+         << "]\n";
 
-  return args.str();
+  return config.str();
 }
 
 std::string PipeWireBackend::buildFilterGraphArgs() const {
@@ -1032,6 +1107,15 @@ std::string PipeWireBackend::runtimeStatePath() const {
   }
 
   return "/tmp/pulseforge-runtime-state";
+}
+
+std::string PipeWireBackend::filterChainConfigPath() const {
+  const std::string runtimeDir = getenvOrEmpty("XDG_RUNTIME_DIR");
+  if (!runtimeDir.empty()) {
+    return runtimeDir + "/pulseforge/filter-chain.conf";
+  }
+
+  return "/tmp/pulseforge-filter-chain.conf";
 }
 
 std::string PipeWireBackend::resolveTargetSinkName() const {

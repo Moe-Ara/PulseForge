@@ -10,8 +10,6 @@
 #include <thread>
 #include <vector>
 
-struct pw_impl_module;
-
 class PipeWireBackend : public IAudioBackend {
 public:
   PipeWireBackend();
@@ -40,8 +38,8 @@ private:
   bool createOrReloadFilterSink();
   bool removeFilterSink();
   bool createFilterSinkWithPactl();
-  bool createFilterSinkWithNativePipeWireModule();
-  bool removeNativeFilterModule();
+  bool createFilterSinkWithPipeWireDaemon();
+  bool removeFilterChainDaemon();
   bool cleanupStaleFilterSink();
   bool saveRuntimeState() const;
   bool clearRuntimeState() const;
@@ -50,14 +48,16 @@ private:
   bool targetSinkIsVisibleToPactl() const;
   bool connectFilterOutputToTargetSink() const;
   bool waitForProcessingSink() const;
+  bool writeFilterChainDaemonConfig() const;
   std::vector<std::string> buildFilterChainModuleArgs() const;
   std::string buildFilterChainModuleArgsForLog() const;
-  std::string buildNativeFilterChainModuleArgs() const;
+  std::string buildFilterChainDaemonConfig() const;
   std::string buildFilterGraphArgs() const;
   std::string buildCapturePropsArgs() const;
   std::string buildPlaybackPropsArgs() const;
   std::string buildParamEqFilters() const;
   std::string runtimeStatePath() const;
+  std::string filterChainConfigPath() const;
   std::string resolveTargetSinkName() const;
   void startLoopThread();
   void stopLoopThread();
@@ -86,7 +86,7 @@ private:
   std::string previousDefaultSinkName{};
 
   int filterModuleId = -1;
-  pw_impl_module *nativeFilterModule = nullptr;
+  int filterProcessId = -1;
   std::string selectedSinkName;
   EffectChain currentEffectChain;
 };
