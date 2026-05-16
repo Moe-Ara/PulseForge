@@ -83,6 +83,10 @@ ProcessResult runProcess(const std::vector<std::string> &arguments) {
     argv.push_back(nullptr);
 
     execvp(argv.front(), argv.data());
+    const std::string error =
+        "execvp failed for " + arguments.front() + ": " +
+        std::string(std::strerror(errno)) + "\n";
+    write(STDERR_FILENO, error.c_str(), error.size());
     _exit(127);
   }
 
@@ -409,21 +413,32 @@ bool PipeWireBackend::createOrReloadFilterSink() {
     return false;
   }
 
-  const ProcessResult loadResult =
-      runProcess({"pw-cli", "load-module", "libpipewire-module-filter-chain",
-                  buildFilterChainArgs()});
-  if (loadResult.exitCode != 0 || loadResult.output.empty()) {
+  const std::string filterChainArgs = buildFilterChainArgs();
+  Logger::info("Loading PipeWire filter-chain args: " + filterChainArgs);
+
+  const ProcessResult loadResult = runProcess(
+      {"pw-cli", "load-module", "libpipewire-module-filter-chain",
+       filterChainArgs});
+  if (loadResult.exitCode != 0) {
     Logger::error(
-        "Failed to create PipeWire filter-chain sink. Output: " +
+        "Failed to create PipeWire filter-chain sink. Exit code: " +
+        std::to_string(loadResult.exitCode) + ". Output: " +
         trim(loadResult.output));
     return false;
   }
 
+  const std::string moduleIdOutput = trim(loadResult.output);
+  if (moduleIdOutput.empty()) {
+    Logger::error(
+        "pw-cli reported success but did not print a module id; refusing to enable because PulseForge could not clean it up reliably.");
+    return false;
+  }
+
   try {
-    filterModuleId = std::stoi(trim(loadResult.output));
+    filterModuleId = std::stoi(moduleIdOutput);
   } catch (...) {
-    Logger::error("Failed to parse filter-chain module id: " +
-                  loadResult.output);
+    Logger::error("Could not parse filter-chain module id from output: " +
+                  moduleIdOutput);
     return false;
   }
 
