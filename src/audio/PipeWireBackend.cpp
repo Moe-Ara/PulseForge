@@ -470,11 +470,24 @@ bool PipeWireBackend::createOrReloadFilterSink() {
   }
 
   if (!createFilterSinkWithPactl() && !createFilterSinkWithPipeWireDaemon()) {
+    if (wasEnabled) {
+      restorePreviousDefaultSink();
+    }
     return false;
   }
 
   Logger::info("Created PipeWire filter-chain sink routed to: " +
                selectedSinkName);
+
+  if (!connectFilterOutputToTargetSink()) {
+    Logger::error(
+        "PulseForge could not connect the filter-chain output to the selected device. Leaving enhancement disabled to avoid silence.");
+    removeFilterSink();
+    if (wasEnabled) {
+      restorePreviousDefaultSink();
+    }
+    return false;
+  }
 
   if (!verifyFilterSinkRouting()) {
     Logger::warn("Could not verify target.object routing. Session manager may still connect it asynchronously.");
@@ -822,6 +835,43 @@ bool PipeWireBackend::targetSinkIsVisibleToPactl() const {
   Logger::error(
       "PulseForge cannot safely set target.object until the selected output device appears in `pactl list sinks short`.");
   return false;
+}
+
+bool PipeWireBackend::connectFilterOutputToTargetSink() const {
+  const std::array<std::pair<std::string, std::string>, 2> stereoLinks = {
+      std::make_pair(filterOutputNodeName + ":output_FL",
+                     selectedSinkName + ":playback_FL"),
+      std::make_pair(filterOutputNodeName + ":output_FR",
+                     selectedSinkName + ":playback_FR")};
+
+  for (const auto &[source, destination] : stereoLinks) {
+    const ProcessResult link = runProcess({"pw-link", "-w", source, destination});
+    const std::string output = trim(link.output);
+
+    if (link.exitCode == 0) {
+      Logger::info("Linked " + source + " -> " + destination);
+      continue;
+    }
+
+    if (output.find("File exists") != std::string::npos ||
+        output.find("already linked") != std::string::npos) {
+      Logger::info("PipeWire link already exists: " + source + " -> " +
+                   destination);
+      continue;
+    }
+
+    if (link.exitCode == 127) {
+      Logger::warn(
+          "pw-link is not available; relying on the session manager to connect PulseForge to the selected sink.");
+      return true;
+    }
+
+    Logger::error("Failed to link " + source + " -> " + destination +
+                  ". Output: " + output);
+    return false;
+  }
+
+  return true;
 }
 
 bool PipeWireBackend::waitForProcessingSink() const {

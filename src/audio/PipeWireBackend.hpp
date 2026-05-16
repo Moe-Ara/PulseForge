@@ -44,6 +44,7 @@ private:
   bool restoreDefaultSinkFromRuntimeState();
   bool verifyFilterSinkRouting() const;
   bool targetSinkIsVisibleToPactl() const;
+  bool connectFilterOutputToTargetSink() const;
   bool waitForProcessingSink() const;
   bool writeFilterChainDaemonConfig() const;
   std::vector<std::string> buildFilterChainModuleArgs() const;
