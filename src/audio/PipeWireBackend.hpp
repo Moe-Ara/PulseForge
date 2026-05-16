@@ -5,8 +5,12 @@
 #include "IAudioBackend.hpp"
 #include <pipewire/pipewire.h>
 #include <spa/utils/dict.h>
+#include <atomic>
 #include <string>
+#include <thread>
 #include <vector>
+
+struct pw_impl_module;
 
 class PipeWireBackend : public IAudioBackend {
 public:
@@ -36,8 +40,8 @@ private:
   bool createOrReloadFilterSink();
   bool removeFilterSink();
   bool createFilterSinkWithPactl();
-  bool createFilterSinkWithPipeWireDaemon();
-  bool removeFilterChainDaemon();
+  bool createFilterSinkWithNativePipeWireModule();
+  bool removeNativeFilterModule();
   bool cleanupStaleFilterSink();
   bool saveRuntimeState() const;
   bool clearRuntimeState() const;
@@ -46,17 +50,17 @@ private:
   bool targetSinkIsVisibleToPactl() const;
   bool connectFilterOutputToTargetSink() const;
   bool waitForProcessingSink() const;
-  bool writeFilterChainDaemonConfig() const;
   std::vector<std::string> buildFilterChainModuleArgs() const;
   std::string buildFilterChainModuleArgsForLog() const;
-  std::string buildFilterChainDaemonConfig() const;
+  std::string buildNativeFilterChainModuleArgs() const;
   std::string buildFilterGraphArgs() const;
   std::string buildCapturePropsArgs() const;
   std::string buildPlaybackPropsArgs() const;
   std::string buildParamEqFilters() const;
   std::string runtimeStatePath() const;
-  std::string filterChainConfigPath() const;
   std::string resolveTargetSinkName() const;
+  void startLoopThread();
+  void stopLoopThread();
 
 private:
   pw_main_loop *loop = nullptr;
@@ -71,6 +75,8 @@ private:
   bool syncDone = false;
   spa_hook registryListener{};
   spa_hook coreListener{};
+  std::thread loopThread;
+  std::atomic_bool loopThreadRunning = false;
 
   bool enabled = false;
   bool defaultSinkRouted = false;
@@ -80,7 +86,7 @@ private:
   std::string previousDefaultSinkName{};
 
   int filterModuleId = -1;
-  int filterProcessId = -1;
+  pw_impl_module *nativeFilterModule = nullptr;
   std::string selectedSinkName;
   EffectChain currentEffectChain;
 };
