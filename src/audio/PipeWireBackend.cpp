@@ -164,10 +164,6 @@ std::string shellQuote(const std::string &value) {
   return quoted;
 }
 
-std::string keyValueArg(const std::string &key, const std::string &value) {
-  return key + "=" + shellQuote(value);
-}
-
 } // namespace
 
 PipeWireBackend::PipeWireBackend() {
@@ -453,21 +449,33 @@ bool PipeWireBackend::createOrReloadFilterSink() {
     return false;
   }
 
-  const std::string filterChainArgs = buildFilterChainModuleArgs();
-  Logger::info("Loading PipeWire filter-chain through pactl with args: " +
-               filterChainArgs);
+  if (!targetSinkIsVisibleToPactl()) {
+    return false;
+  }
 
-  const ProcessResult loadResult =
-      runProcess({"pactl", "load-module", "module-filter-chain",
-                  filterChainArgs});
+  const std::vector<std::string> filterChainArgs = buildFilterChainModuleArgs();
+  Logger::info("Loading PipeWire filter-chain through pactl with args: " +
+               buildFilterChainModuleArgsForLog());
+
+  std::vector<std::string> pactlArgs = {"pactl", "load-module",
+                                        "module-filter-chain"};
+  pactlArgs.insert(pactlArgs.end(), filterChainArgs.begin(),
+                   filterChainArgs.end());
+
+  const ProcessResult loadResult = runProcess(pactlArgs);
   if (loadResult.exitCode != 0) {
+    const std::string output = trim(loadResult.output);
     Logger::error(
         "Failed to create PipeWire filter-chain sink. Exit code: " +
-        std::to_string(loadResult.exitCode) + ". Output: " +
-        trim(loadResult.output));
+        std::to_string(loadResult.exitCode) + ". Output: " + output);
     if (loadResult.exitCode == 127) {
       Logger::error(
           "PulseForge could not find pactl. Install your distribution's PulseAudio/PipeWire Pulse control package, such as pulseaudio-utils or pipewire-pulse.");
+    }
+    if (loadResult.exitCode == 1 &&
+        output.find("No such entity") != std::string::npos) {
+      Logger::error(
+          "pactl reported 'No such entity'. If the target sink above is visible, this usually means the PulseAudio/PipeWire Pulse server does not expose module-filter-chain. PulseForge needs that module for the pactl-based lifecycle.");
     }
     return false;
   }
@@ -654,22 +662,71 @@ bool PipeWireBackend::verifyFilterSinkRouting() const {
   return targetPos != std::string::npos;
 }
 
-std::string PipeWireBackend::buildFilterChainModuleArgs() const {
+bool PipeWireBackend::targetSinkIsVisibleToPactl() const {
+  const ProcessResult sinks = runProcess({"pactl", "list", "sinks", "short"});
+  if (sinks.exitCode != 0) {
+    Logger::warn("Could not preflight target sink visibility with pactl. Output: " +
+                 trim(sinks.output));
+    return true;
+  }
+
+  std::istringstream lines(sinks.output);
+  std::string line;
+  while (std::getline(lines, line)) {
+    std::istringstream fields(line);
+    std::string index;
+    std::string sinkName;
+    fields >> index >> sinkName;
+    if (sinkName == selectedSinkName) {
+      return true;
+    }
+  }
+
+  Logger::error("Selected target sink is not visible to pactl: " +
+                selectedSinkName);
+  Logger::error(
+      "PulseForge cannot safely set target.object until the selected output device appears in `pactl list sinks short`.");
+  return false;
+}
+
+std::vector<std::string> PipeWireBackend::buildFilterChainModuleArgs() const {
+  return {"node.description=" + virtualSinkDisplayName,
+          "media.name=" + virtualSinkDisplayName,
+          "filter.graph=" + buildFilterGraphArgs(),
+          "capture.props=" + buildCapturePropsArgs(),
+          "playback.props=" + buildPlaybackPropsArgs()};
+}
+
+std::string PipeWireBackend::buildFilterChainModuleArgsForLog() const {
   std::ostringstream args;
-  args << keyValueArg("node.description", virtualSinkDisplayName) << " "
-       << keyValueArg("media.name", virtualSinkDisplayName) << " "
-       << keyValueArg("filter.graph", buildFilterGraphArgs()) << " "
-       << keyValueArg("capture.props", buildCapturePropsArgs()) << " "
-       << keyValueArg("playback.props", buildPlaybackPropsArgs());
+  const auto moduleArgs = buildFilterChainModuleArgs();
+  for (std::size_t index = 0; index < moduleArgs.size(); ++index) {
+    if (index > 0) {
+      args << " ";
+    }
+
+    const std::string &argument = moduleArgs[index];
+    const std::size_t separator = argument.find('=');
+    if (separator == std::string::npos) {
+      args << shellQuote(argument);
+      continue;
+    }
+
+    args << argument.substr(0, separator + 1)
+         << shellQuote(argument.substr(separator + 1));
+  }
 
   return args.str();
 }
 
 std::string PipeWireBackend::buildFilterGraphArgs() const {
+  const std::string eqFilters = buildParamEqFilters();
+
   std::ostringstream args;
   args << "{ "
-       << "nodes = [ { type = builtin name = eq label = param_eq config = { filters = [ "
-       << buildParamEqFilters() << " ] } } ] "
+       << "nodes = [ { type = builtin name = eq label = param_eq config = { filters1 = [ "
+       << eqFilters << " ] filters2 = [ "
+       << eqFilters << " ] } } ] "
        << "inputs = [ \"eq:In 1\" \"eq:In 2\" ] "
        << "outputs = [ \"eq:Out 1\" \"eq:Out 2\" ] "
        << "}";

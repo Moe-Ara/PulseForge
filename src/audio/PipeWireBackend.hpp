@@ -40,7 +40,9 @@ private:
   bool clearRuntimeState() const;
   bool restoreDefaultSinkFromRuntimeState();
   bool verifyFilterSinkRouting() const;
-  std::string buildFilterChainModuleArgs() const;
+  bool targetSinkIsVisibleToPactl() const;
+  std::vector<std::string> buildFilterChainModuleArgs() const;
+  std::string buildFilterChainModuleArgsForLog() const;
   std::string buildFilterGraphArgs() const;
   std::string buildCapturePropsArgs() const;
   std::string buildPlaybackPropsArgs() const;
