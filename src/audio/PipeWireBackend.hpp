@@ -60,6 +60,7 @@ private:
   spa_hook coreListener{};
 
   bool enabled = false;
+  bool defaultSinkRouted = false;
   std::string virtualSinkName = "pulseforge_enhanced";
   std::string virtualSinkDisplayName = "PulseForge Enhanced";
   std::string filterOutputNodeName = "pulseforge_enhanced_output";

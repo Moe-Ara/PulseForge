@@ -47,6 +47,36 @@ std::string runCommand(const std::string &command) {
   return result;
 }
 
+std::string resolveExecutable(const std::string &name) {
+  if (name.find('/') != std::string::npos) {
+    return name;
+  }
+
+  const char *pathValue = std::getenv("PATH");
+  const std::string path = pathValue ? pathValue : "";
+  std::stringstream pathStream(path);
+  std::string directory;
+  while (std::getline(pathStream, directory, ':')) {
+    const std::filesystem::path candidate =
+        std::filesystem::path(directory) / name;
+    if (access(candidate.c_str(), X_OK) == 0) {
+      return candidate.string();
+    }
+  }
+
+  const std::array<std::filesystem::path, 5> fallbackDirectories = {
+      "/usr/bin", "/bin", "/usr/local/bin", "/usr/sbin",
+      "/run/current-system/sw/bin"};
+  for (const auto &directory : fallbackDirectories) {
+    const std::filesystem::path candidate = directory / name;
+    if (access(candidate.c_str(), X_OK) == 0) {
+      return candidate.string();
+    }
+  }
+
+  return name;
+}
+
 struct ProcessResult {
   int exitCode = -1;
   std::string output;
@@ -54,6 +84,14 @@ struct ProcessResult {
 
 ProcessResult runProcess(const std::vector<std::string> &arguments) {
   ProcessResult result;
+  if (arguments.empty()) {
+    Logger::error("Cannot run an empty process command.");
+    return result;
+  }
+
+  std::vector<std::string> resolvedArguments = arguments;
+  resolvedArguments.front() = resolveExecutable(resolvedArguments.front());
+
   int pipeFds[2];
 
   if (pipe(pipeFds) != 0) {
@@ -76,15 +114,15 @@ ProcessResult runProcess(const std::vector<std::string> &arguments) {
     close(pipeFds[1]);
 
     std::vector<char *> argv;
-    argv.reserve(arguments.size() + 1);
-    for (const auto &argument : arguments) {
+    argv.reserve(resolvedArguments.size() + 1);
+    for (const auto &argument : resolvedArguments) {
       argv.push_back(const_cast<char *>(argument.c_str()));
     }
     argv.push_back(nullptr);
 
     execvp(argv.front(), argv.data());
     const std::string error =
-        "execvp failed for " + arguments.front() + ": " +
+        "execvp failed for " + resolvedArguments.front() + ": " +
         std::string(std::strerror(errno)) + "\n";
     write(STDERR_FILENO, error.c_str(), error.size());
     _exit(127);
@@ -259,13 +297,13 @@ bool PipeWireBackend::routeDefaultSinkToProcessingSink() {
   }
 
   Logger::info("Set default sink to virtual: " + virtualSinkDisplayName);
+  defaultSinkRouted = true;
   return saveRuntimeState();
 }
 
 bool PipeWireBackend::restorePreviousDefaultSink() {
   if (previousDefaultSinkName.empty()) {
-    Logger::warn("No previous default sink to restore.");
-    return false;
+    return true;
   }
 
   if (!runProcessChecked({"pactl", "set-default-sink", previousDefaultSinkName},
@@ -276,6 +314,7 @@ bool PipeWireBackend::restorePreviousDefaultSink() {
   Logger::info("Restored previous default sink with name: " +
                previousDefaultSinkName);
   previousDefaultSinkName.clear();
+  defaultSinkRouted = false;
   return true;
 }
 
@@ -424,6 +463,10 @@ bool PipeWireBackend::createOrReloadFilterSink() {
         "Failed to create PipeWire filter-chain sink. Exit code: " +
         std::to_string(loadResult.exitCode) + ". Output: " +
         trim(loadResult.output));
+    if (loadResult.exitCode == 127) {
+      Logger::error(
+          "PulseForge could not find pw-cli. Install your distribution's PipeWire tools package, such as pipewire-bin, pipewire-tools, or pipewire-utils.");
+    }
     return false;
   }
 
