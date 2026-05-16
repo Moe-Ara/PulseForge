@@ -35,19 +35,26 @@ private:
   static void onCoreDone(void *data, uint32_t id, int seq);
   bool createOrReloadFilterSink();
   bool removeFilterSink();
+  bool createFilterSinkWithPactl();
+  bool createFilterSinkWithPipeWireDaemon();
+  bool removeFilterChainDaemon();
   bool cleanupStaleFilterSink();
   bool saveRuntimeState() const;
   bool clearRuntimeState() const;
   bool restoreDefaultSinkFromRuntimeState();
   bool verifyFilterSinkRouting() const;
   bool targetSinkIsVisibleToPactl() const;
+  bool waitForProcessingSink() const;
+  bool writeFilterChainDaemonConfig() const;
   std::vector<std::string> buildFilterChainModuleArgs() const;
   std::string buildFilterChainModuleArgsForLog() const;
+  std::string buildFilterChainDaemonConfig() const;
   std::string buildFilterGraphArgs() const;
   std::string buildCapturePropsArgs() const;
   std::string buildPlaybackPropsArgs() const;
   std::string buildParamEqFilters() const;
   std::string runtimeStatePath() const;
+  std::string filterChainConfigPath() const;
   std::string resolveTargetSinkName() const;
 
 private:
@@ -72,6 +79,7 @@ private:
   std::string previousDefaultSinkName{};
 
   int filterModuleId = -1;
+  int filterProcessId = -1;
   std::string selectedSinkName;
   EffectChain currentEffectChain;
 };
