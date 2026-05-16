@@ -13,7 +13,8 @@ public:
 
   bool selectOutputDevice(const std::string &deviceId);
   bool applyPreset(const Preset &preset);
-
+  bool isEnabled() const;
 private:
   IAudioBackend &backend;
+  bool enabled = false;
 };

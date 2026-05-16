@@ -1,0 +1,40 @@
+QPushButton#primaryButton {
+    background-color: #7c3aed;
+    border: none;
+    border-radius: 14px;
+
+    padding-top: 12px;
+    padding-bottom: 12px;
+    padding-left: 22px;
+    padding-right: 22px;
+
+    color: white;
+
+    font-size: 15px;
+    font-weight: 700;
+
+    min-width: 160px;
+}
+
+QPushButton#primaryButton:hover {
+    background-color: #8b5cf6;
+}
+
+QPushButton#primaryButton:pressed {
+    background-color: #6d28d9;
+}
+
+QPushButton#primaryButton:disabled {
+    background-color: #333333;
+    color: #777777;
+}
+QLabel#titleLabel {
+    font-size: 18px;
+    font-weight: 700;
+    color: white;
+}
+
+QLabel#statusLabel {
+    font-size: 13px;
+    color: #aaaaaa;
+}

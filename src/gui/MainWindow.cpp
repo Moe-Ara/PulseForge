@@ -25,9 +25,11 @@ void MainWindow::setupUi() {
   enableButton = new QPushButton("Enable Enhancement", this);
   disableButton = new QPushButton("Disable Enhancement", this);
   applyPresetButton = new QPushButton("Apply Preset", this);
+  enhancementToggle = new EnhancementToggle(this);
 
   presetComboBox->addItem("Gaming", "gaming");
 
+  layout->addWidget(enhancementToggle);
   layout->addWidget(statusLabel);
   layout->addWidget(deviceComboBox);
   layout->addWidget(presetComboBox);
@@ -71,6 +73,17 @@ void MainWindow::setupConnections() {
     audioService.applyPreset(preset);
     statusLabel->setText("Gaming preset applied");
   });
+  connect(enhancementToggle->button(), &QPushButton::clicked, this, [this]() {
+  if (audioService.isEnabled()) {
+    if (audioService.disableEnhancement()) {
+      enhancementToggle->setEnabledState(false);
+    }
+  } else {
+    if (audioService.enableEnhancement()) {
+      enhancementToggle->setEnabledState(true);
+    }
+  }
+});
 }
 
 Preset MainWindow::createGamingPreset() const {

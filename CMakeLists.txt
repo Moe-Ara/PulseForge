@@ -15,6 +15,7 @@ add_executable(bazzite-sound
     src/main.cpp
     src/service/AudioService.cpp
     src/gui/MainWindow.cpp
+    src/gui/components/EnhancementToggle.cpp
     src/audio/PipeWireBackend.cpp
 )
 

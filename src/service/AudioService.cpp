@@ -13,11 +13,13 @@ std::vector<AudioDevice> AudioService::getOutputDevices() {
 
 bool AudioService::enableEnhancement() {
   backend.createVirtualSink("BazziteSound Enhanced");
-  return backend.enable();
+  enabled = backend.enable();
+  return enabled;
 }
 
 bool AudioService::disableEnhancement() {
   backend.disable();
+  enabled = false;
   return backend.removeVirtualSink("BazziteSound Enhanced");
 }
 
@@ -28,4 +30,7 @@ bool AudioService::selectOutputDevice(const std::string &deviceId) {
 bool AudioService::applyPreset(const Preset &preset) {
   Logger::info("Applying preset: " + preset.name);
   return backend.applyEffectChain(preset.chain);
+}
+bool AudioService::isEnabled() const {
+  return enabled;
 }

@@ -1,6 +1,7 @@
 #pragma once
 #include <QMainWindow>
 #include <queue>
+#include "components/EnhancementToggle.hpp"
 
 class QPushButton;
 class QComboBox;
@@ -28,4 +29,5 @@ private:
   QPushButton *enableButton = nullptr;
   QPushButton *disableButton = nullptr;
   QPushButton *applyPresetButton = nullptr;
+  EnhancementToggle *enhancementToggle = nullptr;
 };

@@ -27,12 +27,14 @@ public:
   bool isEnabled() const override;
   bool setDefaultSinkToVirtual();
   bool restorePreviousDefaultSink();
+  
 private:
   static void onRegistryGlobal(void *data, uint32_t id, uint32_t permissions,
                                const char *type, uint32_t version,
                                const struct spa_dict *props);
   static void onCoreDone(void *data, uint32_t id, int seq);
-
+  bool createLoopbackToSelectedSink();
+  bool removeLoopback();
 
 private:
   pw_main_loop *loop = nullptr;
@@ -54,4 +56,8 @@ private:
   std::string virtualSinkName = "pulseforge_enhanced";
   std::string virtualSinkDisplayName = "PulseForge Enhanced";
   std::string previousDefaultSinkName{};
+
+  int loopbackModuleId = -1;
+  std::string selectedSinkName;
+  
 };

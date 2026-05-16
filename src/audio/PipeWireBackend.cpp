@@ -233,7 +233,14 @@ void PipeWireBackend::onRegistryGlobal(
   const char *factoryName = spa_dict_lookup(props, PW_KEY_FACTORY_NAME);
 
   const std::string name = nodeName ? nodeName : "";
-
+  if (nodeName && std::string(nodeName) == self->virtualSinkName)
+  {
+    return;
+  }
+  if (nodeDescription && std::string(nodeDescription).find("PulseForge") != std::string::npos)
+  {
+    return;
+  }
   // Skip monitor/virtual/internal nodes for now
   if (name.find("monitor") != std::string::npos ||
       name.find("Monitor") != std::string::npos ||
@@ -341,15 +348,77 @@ bool PipeWireBackend::applyEffectChain(const EffectChain &)
 
 bool PipeWireBackend::enable()
 {
-  if (!createVirtualSink(virtualSinkDisplayName)) {
+  if (!createVirtualSink(virtualSinkDisplayName))
+  {
     return false;
   }
+  if (!setDefaultSinkToVirtual())
+  {
+    return false;
+  }
+  selectedSinkName = previousDefaultSinkName;
 
-  return setDefaultSinkToVirtual();
+  return createLoopbackToSelectedSink();
 }
 
 bool PipeWireBackend::disable()
 {
-    restorePreviousDefaultSink();
+  removeLoopback();
+  restorePreviousDefaultSink();
   return removeVirtualSink(virtualSinkDisplayName);
+}
+bool PipeWireBackend::createLoopbackToSelectedSink()
+{
+  if (loopbackModuleId != -1)
+  {
+    Logger::warn("Loopback module already created with id: " + std::to_string(loopbackModuleId));
+    return true;
+  }
+  if (selectedSinkName.empty())
+  {
+    Logger::warn("No target sink selected for loopback.");
+    return false;
+  }
+  const std::string command =
+      "pactl load-module module-loopback "
+      "sink=" +
+      selectedSinkName + " "
+                         "source=" +
+      virtualSinkName + ".monitor";
+  const std::string result = runCommand(command);
+  if (result.empty())
+  {
+    Logger::error("Failed to create loopback module. Command output was empty.");
+    return false;
+  }
+  try
+  {
+    loopbackModuleId = std::stoi(trim(result));
+  }
+  catch (...)
+  {
+    Logger::error("Failed to parse loopback module id: " + result);
+    return false;
+  }
+  Logger::info("Created loopback to sink: " + selectedSinkName);
+  Logger::info("Loopback module ID: " + std::to_string(loopbackModuleId));
+  return true;
+}
+bool PipeWireBackend::removeLoopback()
+{
+  if (loopbackModuleId == -1)
+  {
+    Logger::warn("No loopback module to remove.");
+    return true;
+  }
+  const std::string command = "pactl unload-module " + std::to_string(loopbackModuleId);
+  const int result = std::system(command.c_str());
+  if (result != 0)
+  {
+    Logger::error("Failed to remove loopback module. Command exited with code: " + std::to_string(result));
+    return false;
+  }
+  Logger::info("Removed loopback module with ID: " + std::to_string(loopbackModuleId));
+  loopbackModuleId = -1;
+  return true;
 }
