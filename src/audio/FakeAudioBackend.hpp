@@ -10,16 +10,16 @@ public:
     return true;
   }
   std::vector<AudioDevice> listOutputDevices() override {
-    return {{"Speaker-1", "Built-in Speaker", true},
-            {"Headphones-1", "Headphones", false}};
+    return {{"Speaker-1", "Built-in Speaker", "speaker-1", true},
+            {"Headphones-1", "Headphones", "headphones-1", false}};
   }
-  bool createVirtualSink(const std::string &name) override {
-    Logger::info("Creating virtual sink: " + name);
+  bool createProcessingSink(const std::string &displayName) override {
+    Logger::info("Creating processing sink: " + displayName);
     return true;
   }
 
-  bool removeVirtualSink(const std::string &name) override {
-    Logger::info("Removing virtual sink: " + name);
+  bool removeProcessingSink() override {
+    Logger::info("Removing processing sink");
     return true;
   }
 
@@ -46,5 +46,9 @@ public:
   bool disable() override {
     Logger::info("Enhancement disabled");
     return true;
+  }
+
+  bool isEnabled() const override {
+    return false;
   }
 };

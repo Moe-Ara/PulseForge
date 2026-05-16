@@ -1,12 +1,10 @@
-// IAudioBackend.hpp
 #pragma once
 #include "AudioDevice.hpp"
 #include "EffectChain.hpp"
 #include <string>
 #include <vector>
 
-class IAudioBackend
-{
+class IAudioBackend {
 public:
   virtual ~IAudioBackend() = default;
 
@@ -14,8 +12,8 @@ public:
 
   virtual std::vector<AudioDevice> listOutputDevices() = 0;
 
-  virtual bool createVirtualSink(const std::string &name) = 0;
-  virtual bool removeVirtualSink(const std::string &name) = 0;
+  virtual bool createProcessingSink(const std::string &displayName) = 0;
+  virtual bool removeProcessingSink() = 0;
 
   virtual bool setTargetDevice(const std::string &deviceId) = 0;
 

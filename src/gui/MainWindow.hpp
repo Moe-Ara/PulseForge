@@ -4,10 +4,11 @@
 
 class DeviceSelector;
 class EnhancementToggle;
+class EqualizerPanel;
 class PresetSelector;
 class StatusIndicator;
 
-#include "../presets/Preset.hpp"
+#include "../presets/PresetStore.hpp"
 #include "../service/AudioService.hpp"
 
 class MainWindow : public QMainWindow {
@@ -17,15 +18,16 @@ public:
 private:
   void setupUi();
   void loadDevices();
+  void loadPresets();
   void setupConnections();
   void setEnhancementActive(bool active, const QString &message);
 
-  Preset createGamingPreset() const;
-
 private:
   AudioService &audioService;
+  PresetStore presetStore;
   DeviceSelector *deviceSelector = nullptr;
   EnhancementToggle *enhancementToggle = nullptr;
+  EqualizerPanel *equalizerPanel = nullptr;
   PresetSelector *presetSelector = nullptr;
   StatusIndicator *statusIndicator = nullptr;
 };

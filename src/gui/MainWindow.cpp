@@ -7,12 +7,18 @@
 #include "components/PresetSelector.hpp"
 #include "components/StatusIndicator.hpp"
 
+#include "../presets/PresetFactory.hpp"
+
 #include <QComboBox>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
+#include <QLineEdit>
+#include <QMessageBox>
 #include <QPushButton>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <vector>
 
 MainWindow::MainWindow(AudioService &audioService, QWidget *parent)
     : QMainWindow(parent), audioService(audioService) {
@@ -69,7 +75,7 @@ void MainWindow::setupUi() {
       new CardContainer("Preset", "Simple profiles without extra clutter.",
                         this);
   presetSelector = new PresetSelector(this);
-  presetSelector->addPreset("Gaming clarity", "gaming");
+  loadPresets();
   presetCard->contentLayout()->addWidget(presetSelector);
 
   statusIndicator = new StatusIndicator(this);
@@ -83,7 +89,7 @@ void MainWindow::setupUi() {
   mainColumn->setSpacing(16);
 
   enhancementToggle = new EnhancementToggle(this);
-  auto *equalizerPanel = new EqualizerPanel(this);
+  equalizerPanel = new EqualizerPanel(this);
 
   mainColumn->addWidget(enhancementToggle);
   mainColumn->addWidget(equalizerPanel);
@@ -98,12 +104,21 @@ void MainWindow::setupUi() {
 
   setCentralWidget(central);
   setWindowTitle("PulseForge");
-  setMinimumSize(920, 600);
-  resize(1040, 640);
+  setMinimumSize(1040, 620);
+  resize(1180, 680);
 }
 
 void MainWindow::loadDevices() {
   deviceSelector->setDevices(audioService.getOutputDevices());
+}
+
+void MainWindow::loadPresets() {
+  presetSelector->clearPresets();
+  presetSelector->addPreset("Gaming clarity", "gaming");
+
+  for (const auto &preset : presetStore.loadPresets()) {
+    presetSelector->addPreset(preset.name, preset.id);
+  }
 }
 
 void MainWindow::setupConnections() {
@@ -122,9 +137,47 @@ void MainWindow::setupConnections() {
   connect(presetSelector->comboBox(),
           QOverload<int>::of(&QComboBox::currentIndexChanged), this,
           [this]() {
-            audioService.applyPreset(createGamingPreset());
-            statusIndicator->setMessage("Gaming clarity preset selected.");
+            const QString presetId =
+                presetSelector->comboBox()->currentData().toString();
+
+            if (presetId == "gaming") {
+              audioService.applyPreset(PresetFactory::gaming());
+              statusIndicator->setMessage("Gaming clarity preset selected.");
+              return;
+            }
+
+            SavedPreset preset;
+            if (presetStore.loadPreset(presetId, preset)) {
+              equalizerPanel->setGains(preset.gains);
+              audioService.applyPreset(PresetFactory::equalizer(preset.gains));
+              statusIndicator->setMessage("Preset loaded: " + preset.name);
+            }
           });
+
+  equalizerPanel->setGainsChangedHandler(
+      [this](const std::vector<float> &gains) {
+        audioService.applyPreset(PresetFactory::equalizer(gains));
+        statusIndicator->setMessage("Equalizer curve updated.");
+      });
+
+  connect(presetSelector->saveButton(), &QPushButton::clicked, this, [this]() {
+    bool accepted = false;
+    const QString presetName = QInputDialog::getText(
+        this, "Save Preset", "Preset name", QLineEdit::Normal, {}, &accepted);
+
+    if (!accepted || presetName.trimmed().isEmpty()) {
+      return;
+    }
+
+    if (!presetStore.savePreset(presetName, equalizerPanel->gains())) {
+      QMessageBox::warning(this, "Preset Not Saved",
+                           "PulseForge could not save this preset.");
+      return;
+    }
+
+    loadPresets();
+    statusIndicator->setMessage("Preset saved: " + presetName.trimmed());
+  });
 
   connect(enhancementToggle->button(), &QPushButton::clicked, this, [this]() {
     if (audioService.isEnabled()) {
@@ -134,7 +187,7 @@ void MainWindow::setupConnections() {
       return;
     }
 
-    audioService.applyPreset(createGamingPreset());
+    audioService.applyPreset(PresetFactory::equalizer(equalizerPanel->gains()));
 
     if (audioService.enableEnhancement()) {
       setEnhancementActive(
@@ -147,13 +200,4 @@ void MainWindow::setEnhancementActive(bool active, const QString &message) {
   enhancementToggle->setEnabledState(active);
   statusIndicator->setActive(active);
   statusIndicator->setMessage(message);
-}
-
-Preset MainWindow::createGamingPreset() const {
-  return Preset{"gaming",
-                "Gaming",
-                "Boost clarity and footsteps.",
-                {{{"eq", {{"bass", 1.1f}, {"treble", 1.25f}}},
-                  {"compressor", {{"threshold", -18.0f}, {"ratio", 2.0f}}},
-                  {"limiter", {{"ceiling", -1.0f}}}}}};
 }

@@ -1,6 +1,10 @@
 #pragma once
 #include "../audio/IAudioBackend.hpp"
 #include "../presets/Preset.hpp"
+
+#include <string>
+#include <vector>
+
 class AudioService {
 public:
   explicit AudioService(IAudioBackend &backend);
@@ -14,6 +18,7 @@ public:
   bool selectOutputDevice(const std::string &deviceId);
   bool applyPreset(const Preset &preset);
   bool isEnabled() const;
+
 private:
   IAudioBackend &backend;
   bool enabled = false;

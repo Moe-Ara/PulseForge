@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.20)
 
-project(BazziteSound LANGUAGES CXX)
+project(PulseForge LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -14,6 +14,8 @@ pkg_check_modules(PIPEWIRE REQUIRED libpipewire-0.3)
 add_executable(bazzite-sound
     src/main.cpp
     src/service/AudioService.cpp
+    src/presets/PresetFactory.cpp
+    src/presets/PresetStore.cpp
     src/gui/MainWindow.cpp
     src/gui/components/CardContainer.cpp
     src/gui/components/DeviceSelector.cpp
@@ -34,4 +36,3 @@ target_link_libraries(bazzite-sound PRIVATE
 )
 
 target_compile_options(bazzite-sound PRIVATE ${PIPEWIRE_CFLAGS_OTHER})
-

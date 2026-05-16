@@ -135,6 +135,26 @@ QPushButton#powerButton {
     padding: 0 24px;
 }
 
+QPushButton#secondaryButton {
+    background-color: #1d1a29;
+    border: 1px solid #342f45;
+    border-radius: 12px;
+    color: #ddd6fe;
+    font-size: 13px;
+    font-weight: 750;
+    min-height: 40px;
+    padding: 0 16px;
+}
+
+QPushButton#secondaryButton:hover {
+    background-color: #272138;
+    border-color: #7c3aed;
+}
+
+QPushButton#secondaryButton:pressed {
+    background-color: #201936;
+}
+
 QPushButton#powerButton:hover {
     background-color: #8b5cf6;
 }
