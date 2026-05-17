@@ -7,6 +7,8 @@
 #include "dsp/ParametricEQ.hpp"
 #include "dsp/SpscFrameRingBuffer.hpp"
 
+#include <pipewire/stream.h>
+
 #include <atomic>
 #include <array>
 #include <cstddef>
@@ -32,10 +34,10 @@ public:
 private:
   static void onCaptureProcess(void *data);
   static void onPlaybackProcess(void *data);
-  static void onCaptureStateChanged(void *data, int oldState, int state,
-                                    const char *error);
-  static void onPlaybackStateChanged(void *data, int oldState, int state,
-                                     const char *error);
+  static void onCaptureStateChanged(void *data, pw_stream_state oldState,
+                                    pw_stream_state state, const char *error);
+  static void onPlaybackStateChanged(void *data, pw_stream_state oldState,
+                                     pw_stream_state state, const char *error);
   static void onCaptureParamChanged(void *data, uint32_t id,
                                     const struct spa_pod *param);
   static void onPlaybackParamChanged(void *data, uint32_t id,

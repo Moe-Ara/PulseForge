@@ -318,7 +318,8 @@ void AudioProcessor::onPlaybackProcess(void *data) {
   static_cast<AudioProcessor *>(data)->processPlayback();
 }
 
-void AudioProcessor::onCaptureStateChanged(void *data, int, int state,
+void AudioProcessor::onCaptureStateChanged(void *data, pw_stream_state,
+                                           pw_stream_state state,
                                            const char *) {
   auto *processor = static_cast<AudioProcessor *>(data);
   processor->captureStreaming.store(state == PW_STREAM_STATE_STREAMING,
@@ -328,7 +329,8 @@ void AudioProcessor::onCaptureStateChanged(void *data, int, int state,
   }
 }
 
-void AudioProcessor::onPlaybackStateChanged(void *data, int, int state,
+void AudioProcessor::onPlaybackStateChanged(void *data, pw_stream_state,
+                                            pw_stream_state state,
                                             const char *) {
   auto *processor = static_cast<AudioProcessor *>(data);
   processor->playbackStreaming.store(state == PW_STREAM_STATE_STREAMING,
