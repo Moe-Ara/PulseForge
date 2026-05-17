@@ -67,13 +67,13 @@ AudioProcessor::~AudioProcessor() {
   stop();
 }
 
-bool AudioProcessor::start(const std::string &sourceMonitorName,
+bool AudioProcessor::start(const std::string &sourceSinkName,
                            const std::string &targetSinkName) {
   std::lock_guard<std::mutex> lock(controlMutex);
 
   stopUnlocked();
 
-  sourceMonitor = sourceMonitorName;
+  sourceSink = sourceSinkName;
   targetSink = targetSinkName;
   resetRingBuffer();
 
@@ -104,7 +104,11 @@ bool AudioProcessor::start(const std::string &sourceMonitorName,
                         PW_KEY_MEDIA_CATEGORY,
                         AudioConfig::captureCategory.data(),
                         PW_KEY_MEDIA_ROLE, AudioConfig::mediaRoleMusic.data(),
-                        PW_KEY_TARGET_OBJECT, sourceMonitor.c_str(), nullptr),
+                        AudioConfig::streamCaptureSinkProperty.data(), "true",
+                        AudioConfig::nodeAutoconnectProperty.data(), "true",
+                        AudioConfig::nodeDontFallbackProperty.data(), "true",
+                        AudioConfig::nodeDontMoveProperty.data(), "true",
+                        PW_KEY_TARGET_OBJECT, sourceSink.c_str(), nullptr),
       &captureEvents, this);
   if (!captureStream) {
     Logger::error("AudioProcessor failed to create capture stream.");
@@ -118,6 +122,9 @@ bool AudioProcessor::start(const std::string &sourceMonitorName,
                         PW_KEY_MEDIA_CATEGORY,
                         AudioConfig::playbackCategory.data(),
                         PW_KEY_MEDIA_ROLE, AudioConfig::mediaRoleMusic.data(),
+                        AudioConfig::nodeAutoconnectProperty.data(), "true",
+                        AudioConfig::nodeDontFallbackProperty.data(), "true",
+                        AudioConfig::nodeDontMoveProperty.data(), "true",
                         PW_KEY_TARGET_OBJECT, targetSink.c_str(), nullptr),
       &playbackEvents, this);
   if (!playbackStream) {
@@ -177,7 +184,7 @@ bool AudioProcessor::start(const std::string &sourceMonitorName,
   loopStarted = true;
 
   running.store(true, std::memory_order_release);
-  Logger::info("AudioProcessor started: " + sourceMonitor + " -> " +
+  Logger::info("AudioProcessor started: " + sourceSink + " -> " +
                targetSink);
   Logger::info("AudioProcessor requested F32 stereo at " +
                std::to_string(AudioConfig::defaultSampleRate) + " Hz.");
@@ -216,7 +223,7 @@ void AudioProcessor::stopUnlocked() {
   formatSupported.store(false, std::memory_order_release);
   captureFormatSupported.store(false, std::memory_order_release);
   playbackFormatSupported.store(false, std::memory_order_release);
-  sourceMonitor.clear();
+  sourceSink.clear();
   targetSink.clear();
   resetRingBuffer();
 }

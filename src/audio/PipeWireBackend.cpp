@@ -178,7 +178,7 @@ bool PipeWireBackend::enable() {
     return false;
   }
 
-  bool usingProcessor = audioProcessor.start(monitorSourceName, selectedSinkName);
+  bool usingProcessor = audioProcessor.start(virtualSinkName, selectedSinkName);
   if (!usingProcessor) {
     Logger::warn("AudioProcessor failed to start. Falling back to module-loopback.");
   }
@@ -233,7 +233,7 @@ bool PipeWireBackend::setTargetDevice(const std::string &deviceId) {
         return false;
       }
       const bool processorStarted =
-          audioProcessor.start(monitorSourceName, selectedSinkName);
+          audioProcessor.start(virtualSinkName, selectedSinkName);
       if (!processorStarted) {
         Logger::warn(
             "AudioProcessor failed to restart after device change. Falling back to module-loopback.");

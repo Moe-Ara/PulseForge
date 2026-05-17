@@ -26,7 +26,7 @@ public:
   AudioProcessor();
   ~AudioProcessor();
 
-  bool start(const std::string &sourceMonitor, const std::string &targetSink);
+  bool start(const std::string &sourceSink, const std::string &targetSink);
   void stop();
   void setEffectChain(const EffectChain &chain);
   bool isRunning() const;
@@ -71,7 +71,7 @@ private:
   std::atomic<uint32_t> channelCount = AudioConfig::channelCount;
   std::atomic<float> gainLinear = 1.0f;
 
-  std::string sourceMonitor;
+  std::string sourceSink;
   std::string targetSink;
 
   SpscFrameRingBuffer ringBuffer;

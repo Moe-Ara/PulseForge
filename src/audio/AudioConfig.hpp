@@ -26,6 +26,12 @@ inline constexpr std::string_view captureStreamName = "PulseForge Capture";
 inline constexpr std::string_view playbackStreamName = "PulseForge Playback";
 inline constexpr std::string_view processorThreadLoopName =
     "pulseforge-audio-processor";
+inline constexpr std::string_view streamCaptureSinkProperty =
+    "stream.capture.sink";
+inline constexpr std::string_view nodeAutoconnectProperty = "node.autoconnect";
+inline constexpr std::string_view nodeDontFallbackProperty =
+    "node.dont-fallback";
+inline constexpr std::string_view nodeDontMoveProperty = "node.dont-move";
 inline constexpr std::string_view mediaTypeAudio = "Audio";
 inline constexpr std::string_view captureCategory = "Capture";
 inline constexpr std::string_view playbackCategory = "Playback";
