@@ -1,9 +1,11 @@
 #pragma once
 #include <QMainWindow>
 #include <QString>
+#include <vector>
 
 class DeviceSelector;
 class EnhancementToggle;
+class EffectControls;
 class EqualizerPanel;
 class PresetSelector;
 class StatusIndicator;
@@ -27,6 +29,7 @@ private:
   void saveEnhancementEnabled(bool enabled) const;
   void applyPresetLive(const Preset &preset, bool updateEqualizerSliders);
   void applyCurrentEqualizerCurveLive();
+  std::vector<float> combinedEqualizerGains() const;
   bool selectPresetById(const QString &presetId);
   void setEnhancementActive(bool active, const QString &message);
 
@@ -35,6 +38,7 @@ private:
   PresetStore presetStore;
   DeviceSelector *deviceSelector = nullptr;
   EnhancementToggle *enhancementToggle = nullptr;
+  EffectControls *effectControls = nullptr;
   EqualizerPanel *equalizerPanel = nullptr;
   PresetSelector *presetSelector = nullptr;
   StatusIndicator *statusIndicator = nullptr;

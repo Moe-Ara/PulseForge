@@ -7,33 +7,29 @@
 #include <QVBoxLayout>
 
 EnhancementToggle::EnhancementToggle(QWidget *parent) : QWidget(parent) {
-  setObjectName("heroCard");
+  setObjectName("powerDock");
 
-  auto *root = new QHBoxLayout(this);
-  root->setContentsMargins(28, 26, 28, 26);
-  root->setSpacing(24);
-
-  auto *textLayout = new QVBoxLayout();
-  textLayout->setSpacing(8);
+  auto *root = new QVBoxLayout(this);
+  root->setContentsMargins(0, 8, 0, 2);
+  root->setSpacing(10);
 
   titleLabel = new QLabel("Sound Enhancement", this);
   titleLabel->setObjectName("heroTitle");
+  titleLabel->setAlignment(Qt::AlignCenter);
 
   statusLabel = new QLabel(
       "Bypassed. Enable processing to route audio through PulseForge.", this);
   statusLabel->setObjectName("heroSubtitle");
+  statusLabel->setAlignment(Qt::AlignCenter);
   statusLabel->setWordWrap(true);
 
-  toggleButton = new QPushButton("Enable Sound Enhancement", this);
+  toggleButton = new QPushButton("⏻", this);
   toggleButton->setObjectName("powerButton");
   toggleButton->setProperty("active", false);
+  toggleButton->setToolTip("Enable or disable sound enhancement");
 
-  textLayout->addWidget(titleLabel);
-  textLayout->addWidget(statusLabel);
-
-  root->addLayout(textLayout);
-  root->addStretch();
-  root->addWidget(toggleButton);
+  root->addWidget(toggleButton, 0, Qt::AlignHCenter);
+  root->addWidget(statusLabel, 0, Qt::AlignHCenter);
 }
 
 void EnhancementToggle::setEnabledState(bool enabled) {
@@ -42,12 +38,12 @@ void EnhancementToggle::setEnabledState(bool enabled) {
   if (enabled) {
     statusLabel->setText(
         "Active. Audio is routed through the enhancement chain.");
-    toggleButton->setText("Disable Sound Enhancement");
+    toggleButton->setText("⏻");
     toggleButton->setProperty("active", true);
   } else {
     statusLabel->setText(
         "Bypassed. Enable processing to route audio through PulseForge.");
-    toggleButton->setText("Enable Sound Enhancement");
+    toggleButton->setText("⏻");
     toggleButton->setProperty("active", false);
   }
 

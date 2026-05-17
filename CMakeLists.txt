@@ -29,6 +29,7 @@ add_executable(pulseforge
     src/gui/components/CardContainer.cpp
     src/gui/components/DeviceSelector.cpp
     src/gui/components/EnhancementToggle.cpp
+    src/gui/components/EffectControls.cpp
     src/gui/components/EqualizerPanel.cpp
     src/gui/components/PresetSelector.cpp
     src/gui/components/StatusIndicator.cpp

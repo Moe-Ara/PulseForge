@@ -3,6 +3,7 @@
 #include "components/CardContainer.hpp"
 #include "components/DeviceSelector.hpp"
 #include "components/EnhancementToggle.hpp"
+#include "components/EffectControls.hpp"
 #include "components/EqualizerPanel.hpp"
 #include "components/PresetSelector.hpp"
 #include "components/StatusIndicator.hpp"
@@ -12,6 +13,7 @@
 #include "../dsp/DspConfig.hpp"
 
 #include <QComboBox>
+#include <QFrame>
 #include <QHBoxLayout>
 #include <QInputDialog>
 #include <QLabel>
@@ -24,6 +26,7 @@
 #include <QVariantList>
 #include <QVBoxLayout>
 #include <QWidget>
+#include <algorithm>
 #include <string>
 #include <thread>
 #include <vector>
@@ -67,81 +70,79 @@ void MainWindow::setupUi() {
   central->setObjectName("appRoot");
 
   auto *pageLayout = new QVBoxLayout(central);
-  pageLayout->setContentsMargins(32, 28, 32, 24);
-  pageLayout->setSpacing(20);
+  pageLayout->setContentsMargins(0, 0, 0, 0);
+  pageLayout->setSpacing(0);
 
   auto *headerLayout = new QHBoxLayout();
-  headerLayout->setSpacing(16);
+  headerLayout->setContentsMargins(28, 22, 28, 22);
+  headerLayout->setSpacing(10);
 
-  auto *brandMark = new QLabel("PF", this);
+  auto *brandMark = new QLabel("▮▮▮", this);
   brandMark->setObjectName("brandMark");
   brandMark->setAlignment(Qt::AlignCenter);
-
-  auto *titleStack = new QVBoxLayout();
-  titleStack->setSpacing(4);
 
   auto *titleLabel =
       new QLabel(QString::fromUtf8(AppConfig::applicationName.data()), this);
   titleLabel->setObjectName("appTitle");
 
-  auto *subtitleLabel =
-      new QLabel("Lightweight PipeWire sound enhancement for Linux", this);
-  subtitleLabel->setObjectName("appSubtitle");
-
-  titleStack->addWidget(titleLabel);
-  titleStack->addWidget(subtitleLabel);
-
   headerLayout->addWidget(brandMark);
-  headerLayout->addLayout(titleStack);
+  headerLayout->addWidget(titleLabel);
   headerLayout->addStretch();
 
-  auto *contentLayout = new QHBoxLayout();
-  contentLayout->setSpacing(20);
+  auto *closeLabel = new QLabel("×", this);
+  closeLabel->setObjectName("windowCloseGlyph");
+  closeLabel->setAlignment(Qt::AlignCenter);
+  headerLayout->addWidget(closeLabel);
 
-  auto *sideColumn = new QVBoxLayout();
-  sideColumn->setSpacing(16);
+  auto *divider = new QFrame(this);
+  divider->setObjectName("headerDivider");
+  divider->setFrameShape(QFrame::HLine);
 
-  auto *deviceCard =
-      new CardContainer("Output", "Choose where enhanced audio should play.",
-                        this);
-  deviceSelector = new DeviceSelector(this);
-  deviceCard->contentLayout()->addWidget(deviceSelector);
+  auto *mainPanel = new QWidget(this);
+  mainPanel->setObjectName("mainPanel");
+  auto *mainPanelLayout = new QVBoxLayout(mainPanel);
+  mainPanelLayout->setContentsMargins(26, 26, 26, 34);
+  mainPanelLayout->setSpacing(24);
 
-  auto *presetCard =
-      new CardContainer("Preset", "Simple profiles without extra clutter.",
-                        this);
+  auto *topControls = new QHBoxLayout();
+  topControls->setSpacing(14);
+
   presetSelector = new PresetSelector(this);
   loadPresets();
-  presetCard->contentLayout()->addWidget(presetSelector);
+  deviceSelector = new DeviceSelector(this);
+
+  topControls->addWidget(presetSelector, 1);
+  topControls->addWidget(deviceSelector, 1);
 
   statusIndicator = new StatusIndicator(this);
   statusIndicator->setMessage("Ready. Enhancement is currently bypassed.");
 
-  sideColumn->addWidget(deviceCard);
-  sideColumn->addWidget(presetCard);
-  sideColumn->addStretch();
+  auto *soundSurface = new QWidget(this);
+  soundSurface->setObjectName("soundSurface");
+  auto *soundSurfaceLayout = new QHBoxLayout(soundSurface);
+  soundSurfaceLayout->setContentsMargins(18, 18, 18, 18);
+  soundSurfaceLayout->setSpacing(18);
 
-  auto *mainColumn = new QVBoxLayout();
-  mainColumn->setSpacing(16);
-
-  enhancementToggle = new EnhancementToggle(this);
+  effectControls = new EffectControls(this);
   equalizerPanel = new EqualizerPanel(this);
 
-  mainColumn->addWidget(enhancementToggle);
-  mainColumn->addWidget(equalizerPanel);
-  mainColumn->addStretch();
+  soundSurfaceLayout->addWidget(effectControls, 1);
+  soundSurfaceLayout->addWidget(equalizerPanel, 4);
 
-  contentLayout->addLayout(sideColumn, 2);
-  contentLayout->addLayout(mainColumn, 5);
+  enhancementToggle = new EnhancementToggle(this);
 
   pageLayout->addLayout(headerLayout);
-  pageLayout->addLayout(contentLayout, 1);
-  pageLayout->addWidget(statusIndicator);
+  pageLayout->addWidget(divider);
+  mainPanelLayout->addLayout(topControls);
+  mainPanelLayout->addWidget(soundSurface, 1);
+  mainPanelLayout->addWidget(enhancementToggle);
+  mainPanelLayout->addWidget(statusIndicator);
+  pageLayout->addWidget(mainPanel, 1);
 
   setCentralWidget(central);
   setWindowTitle(QString::fromUtf8(AppConfig::applicationName.data()));
-  setMinimumSize(1040, 620);
-  resize(1180, 680);
+  setMinimumSize(1180, 700);
+  resize(1320, 780);
 }
 
 void MainWindow::loadDevices() {
@@ -226,6 +227,19 @@ void MainWindow::setupConnections() {
                                         : "Equalizer curve updated.");
       });
 
+  effectControls->setValuesChangedHandler([this]() {
+    customCurveActive = true;
+    const bool previousSignalsBlocked =
+        presetSelector->comboBox()->blockSignals(true);
+    selectPresetById("custom-eq");
+    presetSelector->comboBox()->blockSignals(previousSignalsBlocked);
+    applyCurrentEqualizerCurveLive();
+    saveSettings();
+    statusIndicator->setMessage(audioService.isEnabled()
+                                    ? "Enhancement controls updated."
+                                    : "Enhancement controls ready.");
+  });
+
   connect(presetSelector->saveButton(), &QPushButton::clicked, this, [this]() {
     bool accepted = false;
     const QString presetName = QInputDialog::getText(
@@ -274,19 +288,11 @@ void MainWindow::setupConnections() {
       return;
     }
 
-    const std::vector<float> gains = equalizerPanel->gains();
-    const std::string presetId =
-        presetSelector->comboBox()->currentData().toString().toStdString();
-    const bool useCustomCurve = customCurveActive;
+    const std::vector<float> gains = combinedEqualizerGains();
     statusIndicator->setMessage("Enabling enhancement...");
 
-    std::thread([self, service, gains, presetId, useCustomCurve]() {
-      const auto preset = PresetFactory::presetById(presetId);
-      if (!useCustomCurve && preset) {
-        service->applyPreset(*preset);
-      } else {
-        service->applyPreset(PresetFactory::equalizer(gains));
-      }
+    std::thread([self, service, gains]() {
+      service->applyPreset(PresetFactory::equalizer(gains));
       const bool enabled = service->enableEnhancement();
       if (!self) {
         return;
@@ -414,11 +420,25 @@ void MainWindow::applyPresetLive(const Preset &preset,
   if (updateEqualizerSliders) {
     equalizerPanel->setGains(PresetFactory::gainsForPreset(preset));
   }
-  audioService.applyPreset(preset);
+  audioService.applyPreset(PresetFactory::equalizer(combinedEqualizerGains()));
 }
 
 void MainWindow::applyCurrentEqualizerCurveLive() {
-  audioService.applyPreset(PresetFactory::equalizer(equalizerPanel->gains()));
+  audioService.applyPreset(PresetFactory::equalizer(combinedEqualizerGains()));
+}
+
+std::vector<float> MainWindow::combinedEqualizerGains() const {
+  std::vector<float> gains = equalizerPanel->gains();
+  if (!effectControls) {
+    return gains;
+  }
+
+  const std::vector<float> tonalGains = effectControls->tonalGains();
+  const std::size_t count = std::min(gains.size(), tonalGains.size());
+  for (std::size_t i = 0; i < count; ++i) {
+    gains.at(i) += tonalGains.at(i);
+  }
+  return gains;
 }
 
 bool MainWindow::selectPresetById(const QString &presetId) {
