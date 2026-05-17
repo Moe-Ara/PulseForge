@@ -14,8 +14,10 @@
 #include <spa/utils/dict.h>
 #include <string>
 #include <vector>
+#include <mutex>
 
-class PipeWireBackend : public IAudioBackend {
+class PipeWireBackend : public IAudioBackend
+{
 public:
   PipeWireBackend();
   ~PipeWireBackend() override;
