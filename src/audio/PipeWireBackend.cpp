@@ -9,8 +9,7 @@
 
 #include <string>
 
-namespace
-{
+namespace {
 
 const char *stringOrUnknown(const char *value) {
   return value ? value : "unknown";
@@ -35,16 +34,14 @@ bool outputContainsModule(const std::string &output, int moduleId,
 
 } // namespace
 
-PipeWireBackend::PipeWireBackend()
-{
+PipeWireBackend::PipeWireBackend() {
   pw_init(nullptr, nullptr);
 }
 
 PipeWireBackend::~PipeWireBackend() {
   disable();
 
-  if (registry)
-  {
+  if (registry) {
     pw_proxy_destroy(reinterpret_cast<pw_proxy *>(registry));
   }
   if (core) {
@@ -67,29 +64,25 @@ bool PipeWireBackend::initialize() {
   cleanupStaleModules();
 
   loop = pw_main_loop_new(nullptr);
-  if (!loop)
-  {
+  if (!loop) {
     Logger::error("Failed to create PipeWire main loop");
     return false;
   }
 
   context = pw_context_new(pw_main_loop_get_loop(loop), nullptr, 0);
-  if (!context)
-  {
+  if (!context) {
     Logger::error("Failed to create PipeWire context");
     return false;
   }
 
   core = pw_context_connect(context, nullptr, 0);
-  if (!core)
-  {
+  if (!core) {
     Logger::error("Failed to connect to PipeWire");
     return false;
   }
 
   registry = pw_core_get_registry(core, PW_VERSION_REGISTRY, 0);
-  if (!registry)
-  {
+  if (!registry) {
     Logger::error("Failed to get PipeWire registry");
     return false;
   }
@@ -284,16 +277,14 @@ void PipeWireBackend::onRegistryGlobal(
     uint32_t,
     const char *type,
     uint32_t,
-    const struct spa_dict *props)
-{
+    const struct spa_dict *props) {
   auto *self = static_cast<PipeWireBackend *>(data);
   if (!props || !type || std::string(type) != PW_TYPE_INTERFACE_Node) {
     return;
   }
 
   const char *mediaClass = spa_dict_lookup(props, PW_KEY_MEDIA_CLASS);
-  if (!mediaClass || std::string(mediaClass) != "Audio/Sink")
-  {
+  if (!mediaClass || std::string(mediaClass) != "Audio/Sink") {
     return;
   }
 
@@ -303,8 +294,7 @@ void PipeWireBackend::onRegistryGlobal(
   const char *factoryName = spa_dict_lookup(props, PW_KEY_FACTORY_NAME);
 
   const std::string name = nodeName ? nodeName : "";
-  if (nodeName && std::string(nodeName) == self->virtualSinkName)
-  {
+  if (nodeName && std::string(nodeName) == self->virtualSinkName) {
     return;
   }
   if (nodeDescription &&
@@ -316,8 +306,7 @@ void PipeWireBackend::onRegistryGlobal(
   if (name.find("monitor") != std::string::npos ||
       name.find("Monitor") != std::string::npos ||
       name.find("null") != std::string::npos ||
-      name.find("Null") != std::string::npos)
-  {
+      name.find("Null") != std::string::npos) {
     return;
   }
 
@@ -326,17 +315,11 @@ void PipeWireBackend::onRegistryGlobal(
   device.sinkName = nodeName ? nodeName : "";
   if (nodeDescription) {
     device.name = nodeDescription;
-  }
-  else if (nick)
-  {
+  } else if (nick) {
     device.name = nick;
-  }
-  else if (nodeName)
-  {
+  } else if (nodeName) {
     device.name = nodeName;
-  }
-  else
-  {
+  } else {
     device.name = "Unknown Output";
   }
   device.isDefault = false;
