@@ -1,0 +1,13 @@
+[Unit]
+Description=PulseForge Audio Enhancer
+After=graphical-session.target pipewire.service pipewire-pulse.service wireplumber.service
+Wants=pipewire.service pipewire-pulse.service wireplumber.service
+
+[Service]
+Type=simple
+ExecStart=@CMAKE_INSTALL_FULL_BINDIR@/pulseforge --background
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=default.target

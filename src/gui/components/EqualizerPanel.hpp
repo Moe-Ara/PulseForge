@@ -19,4 +19,5 @@ private:
   std::vector<float> currentGains;
   std::vector<QSlider *> sliders;
   std::function<void(const std::vector<float> &)> gainsChangedHandler;
+  bool suppressChangeNotifications = false;
 };

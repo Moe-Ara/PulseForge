@@ -1,0 +1,13 @@
+[Desktop Entry]
+Type=Application
+Name=PulseForge
+GenericName=Audio Enhancer
+Comment=PipeWire audio enhancement for Linux
+TryExec=pulseforge
+Exec=pulseforge
+Icon=pulseforge
+Terminal=false
+Categories=AudioVideo;Audio;
+Keywords=audio;sound;pipewire;equalizer;eq;enhancement;
+StartupNotify=true
+StartupWMClass=PulseForge

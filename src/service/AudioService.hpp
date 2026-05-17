@@ -1,6 +1,7 @@
 #pragma once
 #include "../audio/IAudioBackend.hpp"
 #include "../presets/Preset.hpp"
+#include "../system/AutoStartManager.hpp"
 
 #include <string>
 #include <vector>
@@ -18,8 +19,11 @@ public:
   bool selectOutputDevice(const std::string &deviceId);
   bool applyPreset(const Preset &preset);
   bool isEnabled() const;
+  bool enableAutoStart();
+  bool disableAutoStart();
+  bool isAutoStartEnabled() const;
 
 private:
   IAudioBackend &backend;
-  bool enabled = false;
+  AutoStartManager autoStartManager;
 };

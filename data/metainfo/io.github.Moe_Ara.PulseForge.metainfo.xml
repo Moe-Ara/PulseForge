@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.Moe_Ara.PulseForge</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>PulseForge</name>
+  <summary>PipeWire audio enhancement for Linux</summary>
+  <developer id="io.github.moeara">
+    <name>Moe Ara</name>
+  </developer>
+  <url type="homepage">https://github.com/Moe-Ara/PulseForge</url>
+  <url type="bugtracker">https://github.com/Moe-Ara/PulseForge/issues</url>
+  <description>
+    <p>
+      PulseForge is a lightweight Qt Widgets audio enhancement app for Linux
+      desktops using PipeWire. It routes application audio through a
+      PulseForge-owned virtual sink and C++ DSP processor before playback on
+      the selected output device.
+    </p>
+    <p>
+      It includes built-in presets, a live equalizer, limiter/compressor
+      protection, and user-level systemd autostart support.
+    </p>
+  </description>
+  <launchable type="desktop-id">pulseforge.desktop</launchable>
+  <provides>
+    <binary>pulseforge</binary>
+  </provides>
+  <categories>
+    <category>Audio</category>
+    <category>AudioVideo</category>
+    <category>Utility</category>
+  </categories>
+  <releases>
+    <release version="0.1.0" date="2026-05-17">
+      <description>
+        <p>Initial packaging metadata for Fedora and Bazzite builds.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

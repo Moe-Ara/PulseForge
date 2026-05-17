@@ -14,7 +14,9 @@ public:
   explicit DeviceSelector(QWidget *parent = nullptr);
 
   void setDevices(const std::vector<AudioDevice> &devices);
+  bool selectDeviceBySinkName(const QString &sinkName);
   std::string currentDeviceId() const;
+  QString currentSinkName() const;
   QComboBox *comboBox() const;
 
 private:

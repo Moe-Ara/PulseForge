@@ -12,13 +12,11 @@ std::vector<AudioDevice> AudioService::getOutputDevices() {
 }
 
 bool AudioService::enableEnhancement() {
-  enabled = backend.enable();
-  return enabled;
+  return backend.enable();
 }
 
 bool AudioService::disableEnhancement() {
-  enabled = !backend.disable();
-  return !enabled;
+  return backend.disable();
 }
 
 bool AudioService::selectOutputDevice(const std::string &deviceId) {
@@ -31,5 +29,17 @@ bool AudioService::applyPreset(const Preset &preset) {
 }
 
 bool AudioService::isEnabled() const {
-  return enabled;
+  return backend.isEnabled();
+}
+
+bool AudioService::enableAutoStart() {
+  return autoStartManager.enableAutoStart();
+}
+
+bool AudioService::disableAutoStart() {
+  return autoStartManager.disableAutoStart();
+}
+
+bool AudioService::isAutoStartEnabled() const {
+  return autoStartManager.isAutoStartEnabled();
 }

@@ -32,6 +32,9 @@ void DeviceSelector::setDevices(const std::vector<AudioDevice> &devices) {
   for (const auto &device : devices) {
     deviceComboBox->addItem(QString::fromStdString(device.name),
                             QString::fromStdString(device.id));
+    deviceComboBox->setItemData(deviceComboBox->count() - 1,
+                                QString::fromStdString(device.sinkName),
+                                Qt::UserRole + 1);
     if (device.isDefault) {
       deviceComboBox->setCurrentIndex(deviceComboBox->count() - 1);
     }
@@ -42,8 +45,27 @@ void DeviceSelector::setDevices(const std::vector<AudioDevice> &devices) {
   emptyLabel->setVisible(!hasDevices);
 }
 
+bool DeviceSelector::selectDeviceBySinkName(const QString &sinkName) {
+  if (sinkName.isEmpty()) {
+    return false;
+  }
+
+  for (int i = 0; i < deviceComboBox->count(); ++i) {
+    if (deviceComboBox->itemData(i, Qt::UserRole + 1).toString() == sinkName) {
+      deviceComboBox->setCurrentIndex(i);
+      return true;
+    }
+  }
+
+  return false;
+}
+
 std::string DeviceSelector::currentDeviceId() const {
   return deviceComboBox->currentData().toString().toStdString();
+}
+
+QString DeviceSelector::currentSinkName() const {
+  return deviceComboBox->currentData(Qt::UserRole + 1).toString();
 }
 
 QComboBox *DeviceSelector::comboBox() const {

@@ -1,13 +1,36 @@
 #include "EqualizerPanel.hpp"
 
+#include "dsp/DspConfig.hpp"
+
 #include <QGridLayout>
 #include <QLabel>
 #include <QObject>
 #include <QSlider>
 #include <QStringList>
 #include <algorithm>
-#include <array>
+#include <cmath>
 #include <utility>
+
+namespace {
+
+QString bandLabelFor(float frequency) {
+  if (frequency >= 1000.0f) {
+    const float kilohertz = frequency / 1000.0f;
+    if (std::abs(kilohertz - static_cast<int>(kilohertz)) < 0.01f) {
+      return QString("%1k").arg(static_cast<int>(kilohertz));
+    }
+    return QString("%1k").arg(kilohertz, 0, 'f', 1);
+  }
+
+  return QString::number(static_cast<int>(frequency));
+}
+
+constexpr int kSliderMinimumDb = -12;
+constexpr int kSliderMaximumDb = 12;
+constexpr int kSliderTickIntervalDb = 6;
+constexpr int kSliderHeight = 150;
+
+} // namespace
 
 EqualizerPanel::EqualizerPanel(QWidget *parent)
     : CardContainer("Equalizer", "Subtle tuning for clarity and warmth.",
@@ -28,13 +51,11 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
     layout->addWidget(scaleLabel, i, 0);
   }
 
-  const QStringList bandNames = {"110", "220", "400", "750", "1.5k",
-                                 "3k",  "6k",  "12k", "16k"};
-  constexpr std::array<int, 9> bandValues = {2, 1, -1, 2, 5, 6, 4, 3, 2};
-  currentGains.reserve(bandValues.size());
+  currentGains.reserve(DspConfig::eqBandCount);
 
-  for (int i = 0; i < bandNames.size(); ++i) {
-    const int bandValue = bandValues.at(static_cast<std::size_t>(i));
+  for (std::size_t band = 0; band < DspConfig::eqFrequencies.size(); ++band) {
+    const int i = static_cast<int>(band);
+    const int bandValue = 0;
     currentGains.push_back(static_cast<float>(bandValue));
 
     auto *gainLabel = new QLabel(QString("%1").arg(bandValue), this);
@@ -43,14 +64,15 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
 
     auto *slider = new QSlider(Qt::Vertical, this);
     slider->setObjectName("eqSlider");
-    slider->setRange(-12, 12);
+    slider->setRange(kSliderMinimumDb, kSliderMaximumDb);
     slider->setValue(bandValue);
     slider->setTickPosition(QSlider::TicksBothSides);
-    slider->setTickInterval(6);
-    slider->setFixedHeight(150);
+    slider->setTickInterval(kSliderTickIntervalDb);
+    slider->setFixedHeight(kSliderHeight);
     sliders.push_back(slider);
 
-    auto *bandLabel = new QLabel(bandNames.at(i), this);
+    auto *bandLabel =
+        new QLabel(bandLabelFor(DspConfig::eqFrequencies.at(band)), this);
     bandLabel->setObjectName("bandLabel");
     bandLabel->setAlignment(Qt::AlignCenter);
 
@@ -58,7 +80,8 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
                      [this, gainLabel, index = i](int value) {
                        gainLabel->setText(QString("%1").arg(value));
                        currentGains.at(index) = static_cast<float>(value);
-                       if (gainsChangedHandler) {
+                       if (gainsChangedHandler &&
+                           !suppressChangeNotifications) {
                          gainsChangedHandler(currentGains);
                        }
                      });
@@ -77,9 +100,11 @@ std::vector<float> EqualizerPanel::gains() const {
 
 void EqualizerPanel::setGains(const std::vector<float> &gains) {
   const std::size_t count = std::min(gains.size(), sliders.size());
+  suppressChangeNotifications = true;
   for (std::size_t i = 0; i < count; ++i) {
     sliders.at(i)->setValue(static_cast<int>(gains.at(i)));
   }
+  suppressChangeNotifications = false;
 }
 
 void EqualizerPanel::setGainsChangedHandler(

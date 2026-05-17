@@ -1,13 +1,18 @@
 #pragma once
 
+#include "AudioConfig.hpp"
 #include "AudioDevice.hpp"
 #include "EffectChain.hpp"
 #include "IAudioBackend.hpp"
+#include "PipeWireRouting.hpp"
+#include "dsp/AudioProcessor.hpp"
+#include "system/ProcessRunner.hpp"
+#include "system/RuntimeStateStore.hpp"
+
+#include <mutex>
 #include <pipewire/pipewire.h>
 #include <spa/utils/dict.h>
-#include <atomic>
 #include <string>
-#include <thread>
 #include <vector>
 
 class PipeWireBackend : public IAudioBackend {
@@ -28,44 +33,27 @@ public:
   bool isEnabled() const override;
 
 private:
-  bool routeDefaultSinkToProcessingSink();
-  bool restorePreviousDefaultSink();
-
   static void onRegistryGlobal(void *data, uint32_t id, uint32_t permissions,
                                const char *type, uint32_t version,
                                const struct spa_dict *props);
   static void onCoreDone(void *data, uint32_t id, int seq);
-  bool createOrReloadFilterSink();
-  bool removeFilterSink();
-  bool createFilterSinkWithPactl();
-  bool createFilterSinkWithPwCli();
-  bool createFilterSinkWithPipeWireDaemon();
-  bool removeFilterChainDaemon();
-  bool cleanupStaleFilterSink();
+
+  bool createVirtualSink();
+  bool removeVirtualSink();
+  bool createLoopback();
+  bool removeLoopback();
+  bool rememberDefaultSink();
+  bool setDefaultSink(const std::string &sinkName);
+  bool restorePreviousDefaultSink();
+  bool cleanupStaleModules();
   bool saveRuntimeState() const;
   bool clearRuntimeState() const;
   bool restoreDefaultSinkFromRuntimeState();
-  bool verifyFilterSinkRouting() const;
-  bool targetSinkIsVisibleToPactl() const;
-  bool connectFilterOutputToTargetSink() const;
-  std::vector<std::string> filterOutputPorts() const;
-  bool waitForProcessingSink() const;
-  bool writeFilterChainDaemonConfig() const;
-  std::vector<std::string> buildFilterChainModuleArgs() const;
-  std::string buildFilterChainModuleArgsForLog() const;
-  std::string buildNativeFilterChainModuleArgs() const;
-  std::string buildFilterChainDaemonConfig() const;
-  std::string buildFilterGraphArgs() const;
-  std::string buildCapturePropsArgs() const;
-  std::string buildPlaybackPropsArgs() const;
-  std::string buildParamEqFilters() const;
-  std::string runtimeStatePath() const;
-  std::string filterChainConfigPath() const;
   std::string resolveTargetSinkName() const;
-  void startLoopThread();
-  void stopLoopThread();
 
 private:
+  mutable std::mutex mutex;
+
   pw_main_loop *loop = nullptr;
   pw_context *context = nullptr;
   pw_core *core = nullptr;
@@ -73,24 +61,25 @@ private:
 
   std::vector<AudioDevice> outputDevices;
 
-private:
   int pendingSeq = 0;
   bool syncDone = false;
   spa_hook registryListener{};
   spa_hook coreListener{};
-  std::thread loopThread;
-  std::atomic_bool loopThreadRunning = false;
 
   bool enabled = false;
-  bool defaultSinkRouted = false;
-  std::string virtualSinkName = "pulseforge_enhanced";
-  std::string virtualSinkDisplayName = "PulseForge Enhanced";
-  std::string filterOutputNodeName = "pulseforge_enhanced_output";
-  std::string previousDefaultSinkName{};
-
-  int filterModuleId = -1;
-  int pipeWireModuleId = -1;
-  int filterProcessId = -1;
+  bool usingAudioProcessor = false;
+  std::string virtualSinkName = std::string(AudioConfig::virtualSinkName);
+  std::string virtualSinkDisplayName =
+      std::string(AudioConfig::virtualSinkDisplayName);
+  std::string monitorSourceName = std::string(AudioConfig::monitorSourceName);
+  std::string previousDefaultSinkName;
   std::string selectedSinkName;
+
+  int virtualSinkModuleId = -1;
+  int loopbackModuleId = -1;
   EffectChain currentEffectChain;
+  AudioProcessor audioProcessor;
+  ProcessRunner processRunner;
+  RuntimeStateStore runtimeStateStore;
+  PipeWireRouting routing{processRunner};
 };

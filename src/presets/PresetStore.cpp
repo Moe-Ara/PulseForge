@@ -1,5 +1,8 @@
 #include "PresetStore.hpp"
 
+#include "core/AppConfig.hpp"
+#include "dsp/DspConfig.hpp"
+
 #include <QRegularExpression>
 #include <QSettings>
 #include <QVariantList>
@@ -7,10 +10,9 @@
 
 namespace {
 
-constexpr int expectedBandCount = 9;
-
 QSettings settings() {
-  return QSettings("PulseForge", "PulseForge");
+  return QSettings(QString::fromUtf8(AppConfig::organizationName.data()),
+                   QString::fromUtf8(AppConfig::applicationName.data()));
 }
 
 } // namespace
@@ -36,7 +38,7 @@ std::vector<SavedPreset> PresetStore::loadPresets() const {
     }
 
     if (!preset.id.isEmpty() && !preset.name.isEmpty() &&
-        preset.gains.size() == expectedBandCount) {
+        preset.gains.size() == DspConfig::eqBandCount) {
       presets.push_back(preset);
     }
   }
@@ -47,7 +49,7 @@ std::vector<SavedPreset> PresetStore::loadPresets() const {
 
 bool PresetStore::savePreset(const QString &name,
                              const std::vector<float> &gains) const {
-  if (name.trimmed().isEmpty() || gains.size() != expectedBandCount) {
+  if (name.trimmed().isEmpty() || gains.size() != DspConfig::eqBandCount) {
     return false;
   }
 
