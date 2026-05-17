@@ -38,21 +38,43 @@ QSettings appSettings() {
                    QString::fromUtf8(AppConfig::applicationName.data()));
 }
 
-QVariantList gainsToVariantList(const std::vector<float> &gains) {
+QVariantList floatsToVariantList(const std::vector<float> &floats) {
   QVariantList values;
-  for (float gain : gains) {
-    values.push_back(gain);
+  for (float value : floats) {
+    values.push_back(value);
   }
   return values;
 }
 
-std::vector<float> gainsFromVariantList(const QVariantList &values) {
-  std::vector<float> gains;
-  gains.reserve(values.size());
+std::vector<float> floatsFromVariantList(const QVariantList &values) {
+  std::vector<float> floats;
+  floats.reserve(values.size());
   for (const auto &value : values) {
-    gains.push_back(value.toFloat());
+    floats.push_back(value.toFloat());
   }
-  return gains;
+  return floats;
+}
+
+QVariantList intsToVariantList(const std::vector<int> &ints) {
+  QVariantList values;
+  for (int value : ints) {
+    values.push_back(value);
+  }
+  return values;
+}
+
+std::vector<int> intsFromVariantList(const QVariantList &values) {
+  std::vector<int> ints;
+  ints.reserve(values.size());
+  for (const auto &value : values) {
+    ints.push_back(value.toInt());
+  }
+  return ints;
+}
+
+std::vector<float> opennessGains() {
+  return {0.0f, 0.0f, -0.4f, -0.2f, 0.3f,
+          0.8f, 1.1f, 1.0f, 0.6f};
 }
 
 } // namespace
@@ -124,6 +146,7 @@ void MainWindow::setupUi() {
   soundSurfaceLayout->setSpacing(18);
 
   effectControls = new EffectControls(this);
+  effectControls->setValues(PresetFactory::defaultEffectValues());
   equalizerPanel = new EqualizerPanel(this);
 
   soundSurfaceLayout->addWidget(effectControls, 1);
@@ -206,7 +229,9 @@ void MainWindow::setupConnections() {
             SavedPreset preset;
             if (presetStore.loadPreset(presetId, preset)) {
               customCurveActive = true;
+              equalizerPanel->setFrequencies(preset.frequencies);
               equalizerPanel->setGains(preset.gains);
+              effectControls->setValues(preset.effectValues);
               applyCurrentEqualizerCurveLive();
               saveSettings();
               statusIndicator->setMessage("Preset loaded: " + preset.name);
@@ -249,7 +274,9 @@ void MainWindow::setupConnections() {
       return;
     }
 
-    if (!presetStore.savePreset(presetName, equalizerPanel->gains())) {
+    if (!presetStore.savePreset(presetName, equalizerPanel->gains(),
+                                equalizerPanel->frequencies(),
+                                effectControls->values())) {
       QMessageBox::warning(this, "Preset Not Saved",
                            "PulseForge could not save this preset.");
       return;
@@ -289,10 +316,13 @@ void MainWindow::setupConnections() {
     }
 
     const std::vector<float> gains = combinedEqualizerGains();
+    const std::vector<float> frequencies = equalizerPanel->frequencies();
+    const std::vector<int> effectValues = effectControls->values();
     statusIndicator->setMessage("Enabling enhancement...");
 
-    std::thread([self, service, gains]() {
-      service->applyPreset(PresetFactory::equalizer(gains));
+    std::thread([self, service, gains, frequencies, effectValues]() {
+      service->applyPreset(
+          PresetFactory::equalizer(gains, frequencies, effectValues));
       const bool enabled = service->enableEnhancement();
       if (!self) {
         return;
@@ -332,6 +362,10 @@ void MainWindow::restoreSettings() {
       settings.value("presets/lastPresetId", "flat").toString();
   const QVariantList savedGains =
       settings.value("presets/customEqGains").toList();
+  const QVariantList savedFrequencies =
+      settings.value("presets/customEqFrequencies").toList();
+  const QVariantList savedEffectValues =
+      settings.value("presets/customEffectValues").toList();
   const bool previousPresetSignalsBlocked =
       presetSelector->comboBox()->blockSignals(true);
 
@@ -339,7 +373,15 @@ void MainWindow::restoreSettings() {
       savedGains.size() == static_cast<int>(DspConfig::eqBandCount)) {
     customCurveActive = true;
     selectPresetById("custom-eq");
-    equalizerPanel->setGains(gainsFromVariantList(savedGains));
+    if (savedFrequencies.size() == static_cast<int>(DspConfig::eqBandCount)) {
+      equalizerPanel->setFrequencies(floatsFromVariantList(savedFrequencies));
+    }
+    if (savedEffectValues.size() == 5) {
+      effectControls->setValues(intsFromVariantList(savedEffectValues));
+    } else {
+      effectControls->setValues(PresetFactory::defaultEffectValues());
+    }
+    equalizerPanel->setGains(floatsFromVariantList(savedGains));
     applyCurrentEqualizerCurveLive();
   } else if (selectPresetById(presetId)) {
     if (const auto preset = PresetFactory::presetById(presetId.toStdString())) {
@@ -349,7 +391,9 @@ void MainWindow::restoreSettings() {
       SavedPreset savedPreset;
       if (presetStore.loadPreset(presetId, savedPreset)) {
         customCurveActive = true;
+        equalizerPanel->setFrequencies(savedPreset.frequencies);
         equalizerPanel->setGains(savedPreset.gains);
+        effectControls->setValues(savedPreset.effectValues);
         applyCurrentEqualizerCurveLive();
       }
     }
@@ -399,7 +443,11 @@ void MainWindow::saveSettings() const {
                         ? QString("custom-eq")
                         : presetSelector->comboBox()->currentData().toString());
   settings.setValue("presets/customEqGains",
-                    gainsToVariantList(equalizerPanel->gains()));
+                    floatsToVariantList(equalizerPanel->gains()));
+  settings.setValue("presets/customEqFrequencies",
+                    floatsToVariantList(equalizerPanel->frequencies()));
+  settings.setValue("presets/customEffectValues",
+                    intsToVariantList(effectControls->values()));
   settings.sync();
 }
 
@@ -418,25 +466,36 @@ void MainWindow::setEnhancementActive(bool active, const QString &message) {
 void MainWindow::applyPresetLive(const Preset &preset,
                                  bool updateEqualizerSliders) {
   if (updateEqualizerSliders) {
+    equalizerPanel->setFrequencies(PresetFactory::defaultFrequencies());
     equalizerPanel->setGains(PresetFactory::gainsForPreset(preset));
+    effectControls->setValues(PresetFactory::effectValuesForPreset(preset));
   }
-  audioService.applyPreset(PresetFactory::equalizer(combinedEqualizerGains()));
+  audioService.applyPreset(PresetFactory::equalizer(
+      combinedEqualizerGains(), equalizerPanel->frequencies(),
+      effectControls->values()));
 }
 
 void MainWindow::applyCurrentEqualizerCurveLive() {
-  audioService.applyPreset(PresetFactory::equalizer(combinedEqualizerGains()));
+  audioService.applyPreset(PresetFactory::equalizer(
+      combinedEqualizerGains(), equalizerPanel->frequencies(),
+      effectControls->values()));
 }
 
 std::vector<float> MainWindow::combinedEqualizerGains() const {
   std::vector<float> gains = equalizerPanel->gains();
-  if (!effectControls) {
-    return gains;
+
+  if (effectControls) {
+    const std::vector<float> tonalGains = effectControls->tonalGains();
+    const std::size_t count = std::min(gains.size(), tonalGains.size());
+    for (std::size_t i = 0; i < count; ++i) {
+      gains.at(i) += tonalGains.at(i);
+    }
   }
 
-  const std::vector<float> tonalGains = effectControls->tonalGains();
-  const std::size_t count = std::min(gains.size(), tonalGains.size());
-  for (std::size_t i = 0; i < count; ++i) {
-    gains.at(i) += tonalGains.at(i);
+  const std::vector<float> openGains = opennessGains();
+  const std::size_t openCount = std::min(gains.size(), openGains.size());
+  for (std::size_t i = 0; i < openCount; ++i) {
+    gains.at(i) += openGains.at(i);
   }
   return gains;
 }

@@ -11,6 +11,9 @@ namespace PresetFactory {
 std::vector<Preset> builtInPresets();
 std::optional<Preset> presetById(const std::string &id);
 std::vector<float> gainsForPreset(const Preset &preset);
+std::vector<float> defaultFrequencies();
+std::vector<int> effectValuesForPreset(const Preset &preset);
+std::vector<int> defaultEffectValues();
 
 Preset flat();
 Preset gaming();
@@ -20,5 +23,10 @@ Preset voice();
 Preset bassBoost();
 Preset clarity();
 Preset equalizer(const std::vector<float> &gains);
+Preset equalizer(const std::vector<float> &gains,
+                 const std::vector<float> &frequencies);
+Preset equalizer(const std::vector<float> &gains,
+                 const std::vector<float> &frequencies,
+                 const std::vector<int> &effectValues);
 
 } // namespace PresetFactory

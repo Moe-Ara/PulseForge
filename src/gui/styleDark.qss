@@ -198,6 +198,27 @@ QLabel#bandLabel {
     font-weight: 700;
 }
 
+QSpinBox#frequencyInput {
+    background-color: transparent;
+    border: none;
+    color: #c9c5d2;
+    font-size: 12px;
+    font-weight: 700;
+    min-width: 72px;
+    padding: 0;
+}
+
+QSpinBox#frequencyInput:focus {
+    color: #ffffff;
+    border-bottom: 1px solid #7c3aed;
+}
+
+QSpinBox#frequencyInput::up-button,
+QSpinBox#frequencyInput::down-button {
+    border: none;
+    width: 0px;
+}
+
 QSlider#eqSlider {
     min-width: 44px;
 }

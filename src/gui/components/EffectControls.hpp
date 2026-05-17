@@ -11,6 +11,8 @@ class EffectControls : public QWidget {
 public:
   explicit EffectControls(QWidget *parent = nullptr);
 
+  std::vector<int> values() const;
+  void setValues(const std::vector<int> &values);
   std::vector<float> tonalGains() const;
   void setValuesChangedHandler(std::function<void()> handler);
 

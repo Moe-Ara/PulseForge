@@ -3,6 +3,7 @@
 #include <QLabel>
 #include <QSlider>
 #include <QVBoxLayout>
+#include <algorithm>
 #include <utility>
 
 namespace {
@@ -24,12 +25,31 @@ EffectControls::EffectControls(QWidget *parent) : QWidget(parent) {
   layout->setContentsMargins(26, 22, 26, 22);
   layout->setSpacing(13);
 
-  addControl("Fidelity", 28);
-  addControl("Ambience", 24);
-  addControl("3D surround", 24);
-  addControl("Dynamic boost", 26);
-  addControl("Bass", 42);
+  addControl("Fidelity", 0);
+  addControl("Ambience", 0);
+  addControl("3D surround", 0);
+  addControl("Dynamic boost", 0);
+  addControl("Bass", 0);
   layout->addStretch();
+}
+
+std::vector<int> EffectControls::values() const {
+  std::vector<int> currentValues;
+  currentValues.reserve(sliders.size());
+  for (const auto *slider : sliders) {
+    currentValues.push_back(slider->value());
+  }
+  return currentValues;
+}
+
+void EffectControls::setValues(const std::vector<int> &values) {
+  const std::size_t count = std::min(values.size(), sliders.size());
+  suppressNotifications = true;
+  for (std::size_t i = 0; i < count; ++i) {
+    sliders.at(i)->setValue(std::clamp(values.at(i), kSliderMinimum,
+                                       kSliderMaximum));
+  }
+  suppressNotifications = false;
 }
 
 std::vector<float> EffectControls::tonalGains() const {
@@ -44,15 +64,15 @@ std::vector<float> EffectControls::tonalGains() const {
   const float bass = normalizedValue(sliders.at(4));
 
   return {
-      bass * 2.6f,
-      bass * 1.8f,
-      bass * 0.7f - surround * 0.3f,
-      ambience * 0.7f - surround * 0.2f,
-      ambience * 0.8f + dynamicBoost * 0.4f,
-      fidelity * 1.1f + dynamicBoost * 0.4f,
-      fidelity * 1.4f + surround * 0.8f,
-      fidelity * 0.9f + surround * 1.1f,
-      fidelity * 0.4f + surround * 0.7f,
+      bass * 5.0f,
+      bass * 3.5f,
+      bass * 1.5f - surround * 1.0f,
+      ambience * 1.8f - surround * 0.6f,
+      ambience * 2.0f + dynamicBoost * 1.2f,
+      fidelity * 2.4f + dynamicBoost * 1.4f,
+      fidelity * 3.2f + surround * 2.0f,
+      fidelity * 2.4f + surround * 2.8f,
+      fidelity * 1.4f + surround * 1.8f,
   };
 }
 
