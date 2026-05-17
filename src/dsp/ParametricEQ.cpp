@@ -55,6 +55,7 @@ void ParametricEQ::setBands(const std::vector<EQBand> &bands,
                             float sampleRate) {
   const std::size_t count = std::min(bands.size(), maxBands);
   float totalBoostDb = 0.0f;
+  float peakBoostDb = 0.0f;
   std::size_t enabledCount = 0;
   const uint32_t currentIndex =
       activeConfigIndex.load(std::memory_order_acquire);
@@ -92,13 +93,18 @@ void ParametricEQ::setBands(const std::vector<EQBand> &bands,
     config.bands[i].a2.store(coefficients.a2, std::memory_order_relaxed);
     config.bands[i].enabled.store(true, std::memory_order_relaxed);
 
-    totalBoostDb += std::max(0.0f, safeBand.gainDb);
+    const float positiveBoostDb = std::max(0.0f, safeBand.gainDb);
+    totalBoostDb += positiveBoostDb;
+    peakBoostDb = std::max(peakBoostDb, positiveBoostDb);
     ++enabledCount;
   }
 
+  const float chargeableBoostDb =
+      std::max(0.0f, totalBoostDb - DspConfig::autoHeadroomFreeBoostDb);
   const float autoHeadroomDb =
       -std::min(DspConfig::maxAutoHeadroomDb,
-                totalBoostDb * DspConfig::autoHeadroomBoostRatio);
+                chargeableBoostDb * DspConfig::autoHeadroomTotalBoostRatio +
+                    peakBoostDb * DspConfig::autoHeadroomPeakBoostRatio);
   const float preamp = dbToLinear(autoHeadroomDb);
   config.preamp.store(preamp, std::memory_order_relaxed);
   config.activeBands.store(enabledCount, std::memory_order_relaxed);

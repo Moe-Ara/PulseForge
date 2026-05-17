@@ -96,59 +96,61 @@ std::vector<float> gainsForPreset(const Preset &preset) {
 }
 
 Preset flat() {
-  return makePreset("flat", "Flat", "Neutral response with safe headroom.",
+  return makePreset("flat", "Flat", "Neutral response at unity loudness.",
                     {0.0f, 0.0f, 0.0f, 0.0f, 0.0f,
                      0.0f, 0.0f, 0.0f, 0.0f},
-                    -1.0f, -1.0f);
+                    0.0f, -0.2f);
 }
 
 Preset gaming() {
-  return makePreset("gaming", "Gaming", "Footstep clarity without harsh bass.",
-                    {-2.0f, -1.0f, 0.0f, 2.0f, 3.0f,
-                     4.0f, 3.0f, 2.0f, 1.0f},
-                    -3.0f, -1.0f,
-                    compressor(-18.0f, 2.0f, 5.0f, 90.0f));
+  return makePreset("gaming", "Gaming",
+                    "Tighter lows and clearer positional detail.",
+                    {-1.5f, -1.0f, -0.5f, 1.0f, 1.8f,
+                     2.2f, 1.6f, 0.8f, 0.2f},
+                    -0.3f, -0.2f,
+                    compressor(-10.0f, 1.25f, 8.0f, 140.0f));
 }
 
 Preset music() {
-  return makePreset("music", "Music", "Balanced warmth and sparkle.",
-                    {2.0f, 1.5f, 0.5f, 0.0f, 0.0f,
-                     1.0f, 1.5f, 1.0f, 0.5f},
-                    -2.5f, -1.0f,
-                    compressor(-14.0f, 1.4f, 12.0f, 140.0f));
+  return makePreset("music", "Music", "Gentle warmth with a little air.",
+                    {1.2f, 0.8f, 0.2f, 0.0f, 0.2f,
+                     0.7f, 1.0f, 0.8f, 0.3f},
+                    0.0f, -0.2f,
+                    compressor(-9.0f, 1.15f, 18.0f, 180.0f));
 }
 
 Preset movie() {
   return makePreset("movie", "Movie", "Fuller low end with clearer dialog.",
-                    {3.0f, 2.0f, 0.5f, 1.0f, 2.0f,
-                     2.0f, 1.0f, 0.5f, 0.0f},
-                    -4.0f, -1.0f,
-                    compressor(-20.0f, 2.4f, 8.0f, 180.0f));
+                    {2.0f, 1.4f, 0.2f, 0.6f, 1.2f,
+                     1.4f, 0.7f, 0.2f, 0.0f},
+                    -0.7f, -0.2f,
+                    compressor(-12.0f, 1.35f, 12.0f, 220.0f));
 }
 
 Preset voice() {
   return makePreset("voice", "Voice", "Focused speech and reduced rumble.",
-                    {-6.0f, -4.0f, -2.0f, 1.0f, 3.0f,
-                     3.0f, 1.0f, -1.0f, -2.0f},
-                    -2.0f, -1.0f,
-                    compressor(-22.0f, 2.8f, 4.0f, 120.0f));
+                    {-4.0f, -3.0f, -1.5f, 0.8f, 2.0f,
+                     2.2f, 0.8f, -0.8f, -1.5f},
+                    0.0f, -0.2f,
+                    compressor(-14.0f, 1.6f, 6.0f, 150.0f));
 }
 
 Preset bassBoost() {
   return makePreset("bass-boost", "Bass Boost",
-                    "Extra punch with protected output.",
-                    {5.0f, 4.0f, 2.0f, 0.5f, -1.0f,
-                     0.0f, 1.0f, 0.5f, 0.0f},
-                    -5.0f, -1.0f,
-                    compressor(-16.0f, 1.8f, 10.0f, 160.0f));
+                    "More low-end weight without crushing volume.",
+                    {3.0f, 2.4f, 1.0f, 0.2f, -0.6f,
+                     -0.2f, 0.5f, 0.2f, 0.0f},
+                    -0.8f, -0.2f,
+                    compressor(-11.0f, 1.3f, 14.0f, 200.0f));
 }
 
 Preset clarity() {
-  return makePreset("clarity", "Clarity", "Crisper detail with lighter lows.",
-                    {-2.0f, -1.5f, -0.5f, 1.0f, 2.0f,
-                     3.0f, 3.0f, 2.0f, 1.0f},
-                    -3.0f, -1.0f,
-                    compressor(-15.0f, 1.5f, 6.0f, 100.0f));
+  return makePreset("clarity", "Clarity",
+                    "Cleaner presence with restrained brightness.",
+                    {-1.5f, -1.0f, -0.3f, 0.8f, 1.4f,
+                     1.8f, 1.6f, 0.9f, 0.2f},
+                    -0.2f, -0.2f,
+                    compressor(-10.0f, 1.2f, 8.0f, 150.0f));
 }
 
 Preset equalizer(const std::vector<float> &gains) {
@@ -158,8 +160,8 @@ Preset equalizer(const std::vector<float> &gains) {
   }
 
   return makePreset("custom-eq", "Custom EQ",
-                    "User controlled equalizer curve.", safeGains, -2.0f,
-                    -1.0f, compressor(-12.0f, 1.6f, 8.0f, 120.0f));
+                    "User controlled equalizer curve.", safeGains, 0.0f,
+                    -0.2f);
 }
 
 } // namespace PresetFactory

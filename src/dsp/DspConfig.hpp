@@ -20,8 +20,10 @@ inline constexpr float maxEqQ = 18.0f;
 inline constexpr float minEqGainDb = -18.0f;
 inline constexpr float maxEqGainDb = 18.0f;
 inline constexpr float insignificantGainDb = 0.01f;
-inline constexpr float maxAutoHeadroomDb = 12.0f;
-inline constexpr float autoHeadroomBoostRatio = 0.35f;
+inline constexpr float maxAutoHeadroomDb = 4.0f;
+inline constexpr float autoHeadroomFreeBoostDb = 6.0f;
+inline constexpr float autoHeadroomTotalBoostRatio = 0.12f;
+inline constexpr float autoHeadroomPeakBoostRatio = 0.18f;
 
 inline constexpr float minProcessorGainLinear = 0.0f;
 inline constexpr float maxProcessorGainLinear = 8.0f;
@@ -32,8 +34,8 @@ inline constexpr float defaultCompressorThresholdDb = -18.0f;
 inline constexpr float defaultCompressorRatio = 2.0f;
 inline constexpr float defaultCompressorAttackMs = 5.0f;
 inline constexpr float defaultCompressorReleaseMs = 80.0f;
-inline constexpr float defaultLimiterCeilingDb = -1.0f;
-inline constexpr float defaultLimiterCeilingLinear = 0.8912509f;
+inline constexpr float defaultLimiterCeilingDb = -0.2f;
+inline constexpr float defaultLimiterCeilingLinear = 0.9772372f;
 
 inline constexpr float minCompressorThresholdDb = -60.0f;
 inline constexpr float maxCompressorThresholdDb = 0.0f;
