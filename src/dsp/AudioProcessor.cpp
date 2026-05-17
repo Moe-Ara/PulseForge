@@ -239,6 +239,7 @@ void AudioProcessor::setEffectChain(const EffectChain &chain) {
   float compressorAttackMs = DspConfig::defaultCompressorAttackMs;
   float compressorReleaseMs = DspConfig::defaultCompressorReleaseMs;
   float limiterCeilingDb = DspConfig::defaultLimiterCeilingDb;
+  float width = 1.0f;
 
   for (const auto &effect : chain.effects) {
     if (effect.type == "gain" || effect.type == "preamp") {
@@ -283,12 +284,17 @@ void AudioProcessor::setEffectChain(const EffectChain &chain) {
       limiterCeilingDb = parameterValue(effect, "ceiling", limiterCeilingDb);
       limiterCeilingDb =
           parameterValue(effect, "ceiling_db", limiterCeilingDb);
+    } else if (effect.type == "stereo_width" || effect.type == "spatial") {
+      width = parameterValue(effect, "width", width);
     }
   }
 
   gain = std::clamp(gain, DspConfig::minProcessorGainLinear,
                     DspConfig::maxProcessorGainLinear);
+  width = std::clamp(width, DspConfig::minStereoWidth,
+                     DspConfig::maxStereoWidth);
   gainLinear.store(gain, std::memory_order_release);
+  stereoWidth.store(width, std::memory_order_release);
   const uint32_t currentSampleRate =
       sampleRate.load(std::memory_order_acquire);
   equalizer.setBands(bands, static_cast<float>(currentSampleRate));
@@ -298,6 +304,8 @@ void AudioProcessor::setEffectChain(const EffectChain &chain) {
   dynamics.configureLimiter(limiterCeilingDb, true);
   Logger::info("AudioProcessor gain set to linear value: " +
                std::to_string(gain));
+  Logger::info("AudioProcessor stereo width set to: " +
+               std::to_string(width));
   Logger::info("AudioProcessor EQ updated. Sample rate: " +
                std::to_string(currentSampleRate) + " Hz, active bands: " +
                std::to_string(equalizer.activeBandCount()) +
@@ -429,6 +437,7 @@ void AudioProcessor::processPlayback() {
 void AudioProcessor::writeProcessedSamples(const float *samples,
                                            std::size_t sampleCount) {
   const float gain = gainLinear.load(std::memory_order_relaxed);
+  const float width = stereoWidth.load(std::memory_order_relaxed);
   const std::size_t totalFrames = sampleCount / AudioConfig::channelCount;
   std::size_t processedFrames = 0;
   const float currentSampleRate =
@@ -447,6 +456,18 @@ void AudioProcessor::writeProcessedSamples(const float *samples,
 
     equalizer.process(leftScratch.data(), rightScratch.data(),
                       static_cast<uint32_t>(frames));
+
+    if (std::abs(width - 1.0f) > 0.001f) {
+      for (std::size_t frame = 0; frame < frames; ++frame) {
+        const float left = leftScratch[frame];
+        const float right = rightScratch[frame];
+        const float mid = (left + right) * 0.5f;
+        const float side = (left - right) * 0.5f * width;
+        leftScratch[frame] = mid + side;
+        rightScratch[frame] = mid - side;
+      }
+    }
+
     dynamics.process(leftScratch.data(), rightScratch.data(),
                      static_cast<uint32_t>(frames), currentSampleRate);
 

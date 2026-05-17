@@ -37,7 +37,7 @@ QVariantList floatsToVariantList(const std::vector<float> &floats) {
 }
 
 std::vector<int> defaultEffectValues() {
-  return {24, 10, 6, 8, 8};
+  return {50, 24, 14, 34, 24, 50, 100};
 }
 
 std::vector<int> intsFromVariantList(const QVariantList &values) {
@@ -81,8 +81,14 @@ std::vector<SavedPreset> PresetStore::loadPresets() const {
     }
     preset.effectValues =
         intsFromVariantList(appSettings.value("effectValues").toList());
-    if (preset.effectValues.size() != 5) {
+    if (preset.effectValues.size() < 5) {
       preset.effectValues = defaultEffectValues();
+    } else if (preset.effectValues.size() < defaultEffectValues().size()) {
+      const std::vector<int> defaults = defaultEffectValues();
+      for (std::size_t index = preset.effectValues.size();
+           index < defaults.size(); ++index) {
+        preset.effectValues.push_back(defaults.at(index));
+      }
     }
 
     if (!preset.id.isEmpty() && !preset.name.isEmpty() &&
@@ -101,7 +107,7 @@ bool PresetStore::savePreset(const QString &name,
                              const std::vector<int> &effectValues) const {
   if (name.trimmed().isEmpty() || gains.size() != DspConfig::eqBandCount ||
       frequencies.size() != DspConfig::eqBandCount ||
-      effectValues.size() != 5) {
+      effectValues.size() < defaultEffectValues().size()) {
     return false;
   }
 

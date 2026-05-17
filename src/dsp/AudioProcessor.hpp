@@ -70,6 +70,7 @@ private:
   std::atomic<uint32_t> sampleRate = AudioConfig::defaultSampleRate;
   std::atomic<uint32_t> channelCount = AudioConfig::channelCount;
   std::atomic<float> gainLinear = 1.0f;
+  std::atomic<float> stereoWidth = 1.0f;
 
   std::string sourceSink;
   std::string targetSink;

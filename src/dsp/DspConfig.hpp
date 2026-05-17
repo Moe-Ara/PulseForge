@@ -29,6 +29,8 @@ inline constexpr float autoHeadroomPeakBoostRatio = 0.10f;
 
 inline constexpr float minProcessorGainLinear = 0.0f;
 inline constexpr float maxProcessorGainLinear = 8.0f;
+inline constexpr float minStereoWidth = 0.65f;
+inline constexpr float maxStereoWidth = 2.25f;
 inline constexpr float outputMin = -1.0f;
 inline constexpr float outputMax = 1.0f;
 

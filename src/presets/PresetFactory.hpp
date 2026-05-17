@@ -28,5 +28,9 @@ Preset equalizer(const std::vector<float> &gains,
 Preset equalizer(const std::vector<float> &gains,
                  const std::vector<float> &frequencies,
                  const std::vector<int> &effectValues);
+Preset equalizer(const std::vector<float> &gains,
+                 const std::vector<float> &frequencies,
+                 const std::vector<int> &effectValues, float preampDb,
+                 float limiterCeilingDb);
 
 } // namespace PresetFactory

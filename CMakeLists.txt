@@ -77,6 +77,10 @@ install(FILES src/gui/styleDark.qss
     DESTINATION ${CMAKE_INSTALL_DATADIR}/pulseforge
 )
 
+install(FILES LICENSE NOTICE
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/doc/pulseforge
+)
+
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/pulseforge.service
     DESTINATION ${CMAKE_INSTALL_DATADIR}/systemd/user
 )

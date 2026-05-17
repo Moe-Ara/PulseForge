@@ -73,8 +73,8 @@ std::vector<int> intsFromVariantList(const QVariantList &values) {
 }
 
 std::vector<float> opennessGains() {
-  return {0.0f, 0.0f, -0.4f, -0.2f, 0.3f,
-          0.8f, 1.1f, 1.0f, 0.6f};
+  return {0.4f, 0.2f, -1.0f, -0.5f, 0.5f,
+          1.8f, 2.6f, 2.4f, 1.4f};
 }
 
 } // namespace
@@ -123,8 +123,8 @@ void MainWindow::setupUi() {
   auto *mainPanel = new QWidget(this);
   mainPanel->setObjectName("mainPanel");
   auto *mainPanelLayout = new QVBoxLayout(mainPanel);
-  mainPanelLayout->setContentsMargins(26, 26, 26, 34);
-  mainPanelLayout->setSpacing(24);
+  mainPanelLayout->setContentsMargins(30, 28, 30, 34);
+  mainPanelLayout->setSpacing(22);
 
   auto *topControls = new QHBoxLayout();
   topControls->setSpacing(14);
@@ -142,8 +142,8 @@ void MainWindow::setupUi() {
   auto *soundSurface = new QWidget(this);
   soundSurface->setObjectName("soundSurface");
   auto *soundSurfaceLayout = new QHBoxLayout(soundSurface);
-  soundSurfaceLayout->setContentsMargins(18, 18, 18, 18);
-  soundSurfaceLayout->setSpacing(18);
+  soundSurfaceLayout->setContentsMargins(22, 22, 22, 22);
+  soundSurfaceLayout->setSpacing(22);
 
   effectControls = new EffectControls(this);
   effectControls->setValues(PresetFactory::defaultEffectValues());
@@ -164,8 +164,8 @@ void MainWindow::setupUi() {
 
   setCentralWidget(central);
   setWindowTitle(QString::fromUtf8(AppConfig::applicationName.data()));
-  setMinimumSize(1180, 700);
-  resize(1320, 780);
+  setMinimumSize(1360, 760);
+  resize(1500, 840);
 }
 
 void MainWindow::loadDevices() {
@@ -318,11 +318,14 @@ void MainWindow::setupConnections() {
     const std::vector<float> gains = combinedEqualizerGains();
     const std::vector<float> frequencies = equalizerPanel->frequencies();
     const std::vector<int> effectValues = effectControls->values();
+    const float preampDb = effectControls->preampDb();
+    const float limiterCeilingDb = effectControls->limiterCeilingDb();
     statusIndicator->setMessage("Enabling enhancement...");
 
-    std::thread([self, service, gains, frequencies, effectValues]() {
-      service->applyPreset(
-          PresetFactory::equalizer(gains, frequencies, effectValues));
+    std::thread([self, service, gains, frequencies, effectValues, preampDb,
+                 limiterCeilingDb]() {
+      service->applyPreset(PresetFactory::equalizer(
+          gains, frequencies, effectValues, preampDb, limiterCeilingDb));
       const bool enabled = service->enableEnhancement();
       if (!self) {
         return;
@@ -376,7 +379,7 @@ void MainWindow::restoreSettings() {
     if (savedFrequencies.size() == static_cast<int>(DspConfig::eqBandCount)) {
       equalizerPanel->setFrequencies(floatsFromVariantList(savedFrequencies));
     }
-    if (savedEffectValues.size() == 5) {
+    if (savedEffectValues.size() >= 5) {
       effectControls->setValues(intsFromVariantList(savedEffectValues));
     } else {
       effectControls->setValues(PresetFactory::defaultEffectValues());
@@ -472,13 +475,15 @@ void MainWindow::applyPresetLive(const Preset &preset,
   }
   audioService.applyPreset(PresetFactory::equalizer(
       combinedEqualizerGains(), equalizerPanel->frequencies(),
-      effectControls->values()));
+      effectControls->values(), effectControls->preampDb(),
+      effectControls->limiterCeilingDb()));
 }
 
 void MainWindow::applyCurrentEqualizerCurveLive() {
   audioService.applyPreset(PresetFactory::equalizer(
       combinedEqualizerGains(), equalizerPanel->frequencies(),
-      effectControls->values()));
+      effectControls->values(), effectControls->preampDb(),
+      effectControls->limiterCeilingDb()));
 }
 
 std::vector<float> MainWindow::combinedEqualizerGains() const {
