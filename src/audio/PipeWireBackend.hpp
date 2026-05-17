@@ -9,8 +9,10 @@
 #include <string>
 #include <thread>
 #include <vector>
+#include <mutex>
 
-class PipeWireBackend : public IAudioBackend {
+class PipeWireBackend : public IAudioBackend
+{
 public:
   PipeWireBackend();
   ~PipeWireBackend() override;
@@ -64,6 +66,7 @@ private:
   std::string resolveTargetSinkName() const;
   void startLoopThread();
   void stopLoopThread();
+  std::lock_guard<std::mutex> lock(backendMutex);
 
 private:
   pw_main_loop *loop = nullptr;
@@ -93,4 +96,5 @@ private:
   int filterProcessId = -1;
   std::string selectedSinkName;
   EffectChain currentEffectChain;
+  mutable std::mutex backendMutex;
 };

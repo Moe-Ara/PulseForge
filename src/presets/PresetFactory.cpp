@@ -14,22 +14,36 @@ Preset gaming() {
                   {"limiter", {{"ceiling", -1.0f}}}}}};
 }
 
-Preset equalizer(const std::vector<float> &gains) {
-  constexpr std::array<float, 9> frequencies = {110.0f, 220.0f, 400.0f,
-                                                750.0f, 1500.0f, 3000.0f,
-                                                6000.0f, 12000.0f, 16000.0f};
+Preset equalizer(const std::vector<float>& gains) {
+  constexpr std::array<float, 9> frequencies = {
+      110.0f, 220.0f, 400.0f,
+      750.0f, 1500.0f, 3000.0f,
+      6000.0f, 12000.0f, 16000.0f
+  };
+
+  constexpr float preampDb = -6.0f;
 
   EffectChain chain;
 
   for (std::size_t i = 0; i < frequencies.size() && i < gains.size(); ++i) {
-    chain.effects.push_back({"eq_band",
-                             {{"freq", frequencies.at(i)},
-                              {"gain", gains.at(i)},
-                              {"q", 1.0f}}});
+    const float safeGain = gains.at(i) + preampDb;
+
+    chain.effects.push_back({
+        "eq_band",
+        {
+            {"freq", frequencies.at(i)},
+            {"gain", safeGain},
+            {"q", 1.0f}
+        }
+    });
   }
 
-  return Preset{"custom-eq", "Custom EQ",
-                "User controlled equalizer curve.", chain};
+  return Preset{
+      "custom-eq",
+      "Custom EQ",
+      "User controlled equalizer curve with safety headroom.",
+      chain
+  };
 }
 
 } // namespace PresetFactory
