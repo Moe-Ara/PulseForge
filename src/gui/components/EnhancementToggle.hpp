@@ -11,6 +11,7 @@ public:
 
   void setEnabledState(bool enabled);
   bool isEnabledState() const;
+  void setCompactMode(bool compact);
 
   QPushButton *button() const;
 
@@ -19,4 +20,5 @@ private:
   QLabel *statusLabel = nullptr;
   QPushButton *toggleButton = nullptr;
   bool enabledState = false;
+  bool compactMode = false;
 };

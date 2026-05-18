@@ -2,6 +2,7 @@
 
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QLayout>
 #include <QPushButton>
 #include <QStyle>
 #include <QVBoxLayout>
@@ -10,8 +11,8 @@ EnhancementToggle::EnhancementToggle(QWidget *parent) : QWidget(parent) {
   setObjectName("powerDock");
 
   auto *root = new QVBoxLayout(this);
-  root->setContentsMargins(0, 8, 0, 2);
-  root->setSpacing(10);
+  root->setContentsMargins(0, 4, 0, 0);
+  root->setSpacing(6);
 
   titleLabel = new QLabel("Sound Enhancement", this);
   titleLabel->setObjectName("heroTitle");
@@ -57,4 +58,27 @@ bool EnhancementToggle::isEnabledState() const {
 
 QPushButton *EnhancementToggle::button() const {
   return toggleButton;
+}
+
+void EnhancementToggle::setCompactMode(bool compact) {
+  if (compactMode == compact) {
+    return;
+  }
+
+  compactMode = compact;
+  setProperty("compact", compact);
+  toggleButton->setProperty("compact", compact);
+  statusLabel->setProperty("compact", compact);
+
+  if (auto *boxLayout = qobject_cast<QVBoxLayout *>(layout())) {
+    boxLayout->setContentsMargins(0, compact ? 0 : 4, 0, 0);
+    boxLayout->setSpacing(compact ? 4 : 6);
+  }
+
+  style()->unpolish(this);
+  style()->polish(this);
+  toggleButton->style()->unpolish(toggleButton);
+  toggleButton->style()->polish(toggleButton);
+  statusLabel->style()->unpolish(statusLabel);
+  statusLabel->style()->polish(statusLabel);
 }

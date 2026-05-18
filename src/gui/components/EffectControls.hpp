@@ -19,6 +19,7 @@ public:
   float preampDb() const;
   float limiterCeilingDb() const;
   void setValuesChangedHandler(std::function<void()> handler);
+  void setCompactMode(bool compact);
 
 private:
   void addControl(const QString &name, int value);
@@ -29,4 +30,5 @@ private:
   std::vector<QSlider *> sliders;
   std::function<void()> valuesChangedHandler;
   bool suppressNotifications = false;
+  bool compactMode = false;
 };

@@ -28,17 +28,15 @@ float sanitizeSample(float sample) {
   return sample;
 }
 
-float softLimit(float sample, float ceiling) {
+float finalSafetyClamp(float sample) {
   sample = sanitizeSample(sample);
-  const float sign = sample < 0.0f ? -1.0f : 1.0f;
-  const float magnitude = std::abs(sample);
-  if (magnitude <= ceiling) {
-    return sample;
+  if (sample > 0.999f) {
+    return 0.999f;
   }
-
-  const float excess = magnitude - ceiling;
-  const float shaped = ceiling + excess / (1.0f + excess * 4.0f);
-  return sign * std::min(shaped, 0.999f);
+  if (sample < -0.999f) {
+    return -0.999f;
+  }
+  return sample;
 }
 
 } // namespace
@@ -135,8 +133,8 @@ void DynamicsProcessor::process(float *left, float *right, uint32_t frames,
       rightSample *= limiterGain;
     }
 
-    leftSample = softLimit(leftSample, currentCeiling);
-    rightSample = softLimit(rightSample, currentCeiling);
+    leftSample = finalSafetyClamp(leftSample);
+    rightSample = finalSafetyClamp(rightSample);
     blockPeak = std::max(
         blockPeak, std::max(std::abs(leftSample), std::abs(rightSample)));
     if (std::abs(leftSample) >= 0.999f) {
