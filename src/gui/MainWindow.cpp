@@ -7,11 +7,15 @@
 #include "components/EqualizerPanel.hpp"
 #include "components/PresetSelector.hpp"
 #include "components/StatusIndicator.hpp"
+#include "TrayManager.hpp"
 
 #include "../presets/PresetFactory.hpp"
 #include "../core/AppConfig.hpp"
 #include "../dsp/DspConfig.hpp"
 
+#include <QApplication>
+#include <QCheckBox>
+#include <QCloseEvent>
 #include <QComboBox>
 #include <QFrame>
 #include <QHBoxLayout>
@@ -22,8 +26,8 @@
 #include <QMessageBox>
 #include <QPointer>
 #include <QPushButton>
-#include <QSettings>
-#include <QVariantList>
+#include <QScrollArea>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 #include <QWidget>
 #include <algorithm>
@@ -33,58 +37,33 @@
 
 namespace {
 
-QSettings appSettings() {
-  return QSettings(QString::fromUtf8(AppConfig::organizationName.data()),
-                   QString::fromUtf8(AppConfig::applicationName.data()));
-}
-
-QVariantList floatsToVariantList(const std::vector<float> &floats) {
-  QVariantList values;
-  for (float value : floats) {
-    values.push_back(value);
-  }
-  return values;
-}
-
-std::vector<float> floatsFromVariantList(const QVariantList &values) {
-  std::vector<float> floats;
-  floats.reserve(values.size());
-  for (const auto &value : values) {
-    floats.push_back(value.toFloat());
-  }
-  return floats;
-}
-
-QVariantList intsToVariantList(const std::vector<int> &ints) {
-  QVariantList values;
-  for (int value : ints) {
-    values.push_back(value);
-  }
-  return values;
-}
-
-std::vector<int> intsFromVariantList(const QVariantList &values) {
-  std::vector<int> ints;
-  ints.reserve(values.size());
-  for (const auto &value : values) {
-    ints.push_back(value.toInt());
-  }
-  return ints;
-}
-
 std::vector<float> opennessGains() {
-  return {0.4f, 0.2f, -1.0f, -0.5f, 0.5f,
-          1.8f, 2.6f, 2.4f, 1.4f};
+  return {0.2f, 0.1f, -0.8f, -0.4f, 0.3f,
+          1.0f, 1.4f, 1.2f, 0.7f};
 }
+
+constexpr int kMinimumWindowWidth = 980;
+constexpr int kMinimumWindowHeight = 680;
+constexpr int kMinimumContentWidth = 1080;
+constexpr int kMinimumSoundSurfaceWidth = 1000;
 
 } // namespace
 
 MainWindow::MainWindow(AudioService &audioService, QWidget *parent)
     : QMainWindow(parent), audioService(audioService) {
   setupUi();
+  setupTray();
   loadDevices();
   setupConnections();
   restoreSettings();
+  showFirstRunDialog();
+}
+
+MainWindow::~MainWindow() {
+  saveSettings();
+  if (audioService.isEnabled()) {
+    audioService.disableEnhancement();
+  }
 }
 
 void MainWindow::setupUi() {
@@ -111,10 +90,18 @@ void MainWindow::setupUi() {
   headerLayout->addWidget(titleLabel);
   headerLayout->addStretch();
 
-  auto *closeLabel = new QLabel("×", this);
-  closeLabel->setObjectName("windowCloseGlyph");
-  closeLabel->setAlignment(Qt::AlignCenter);
-  headerLayout->addWidget(closeLabel);
+  minimizeButton = new QPushButton("−", this);
+  minimizeButton->setObjectName("windowMinimizeButton");
+  minimizeButton->setToolTip("Minimize PulseForge to the system tray");
+  minimizeButton->setFlat(true);
+
+  closeButton = new QPushButton("×", this);
+  closeButton->setObjectName("windowCloseButton");
+  closeButton->setToolTip("Quit PulseForge and restore normal audio routing");
+  closeButton->setFlat(true);
+
+  headerLayout->addWidget(minimizeButton);
+  headerLayout->addWidget(closeButton);
 
   auto *divider = new QFrame(this);
   divider->setObjectName("headerDivider");
@@ -122,6 +109,7 @@ void MainWindow::setupUi() {
 
   auto *mainPanel = new QWidget(this);
   mainPanel->setObjectName("mainPanel");
+  mainPanel->setMinimumWidth(kMinimumContentWidth);
   auto *mainPanelLayout = new QVBoxLayout(mainPanel);
   mainPanelLayout->setContentsMargins(30, 28, 30, 34);
   mainPanelLayout->setSpacing(22);
@@ -133,14 +121,36 @@ void MainWindow::setupUi() {
   loadPresets();
   deviceSelector = new DeviceSelector(this);
 
+  presetSelector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+  deviceSelector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   topControls->addWidget(presetSelector, 1);
   topControls->addWidget(deviceSelector, 1);
+
+  auto *preferencesRow = new QHBoxLayout();
+  preferencesRow->setSpacing(18);
+  autoStartCheckBox = new QCheckBox("Start on login", this);
+  autoStartCheckBox->setObjectName("preferenceCheckBox");
+  autoStartCheckBox->setToolTip("Use a user-level systemd service.");
+  startMinimizedCheckBox = new QCheckBox("Start minimized", this);
+  startMinimizedCheckBox->setObjectName("preferenceCheckBox");
+  startMinimizedCheckBox->setToolTip("Launch PulseForge hidden in the tray.");
+  minimizeToTrayCheckBox = new QCheckBox("Minimize to tray on close", this);
+  minimizeToTrayCheckBox->setObjectName("preferenceCheckBox");
+  minimizeToTrayCheckBox->setToolTip(
+      "Closing the window keeps PulseForge running in the tray.");
+  preferencesRow->addWidget(autoStartCheckBox);
+  preferencesRow->addWidget(startMinimizedCheckBox);
+  preferencesRow->addWidget(minimizeToTrayCheckBox);
+  preferencesRow->addStretch();
 
   statusIndicator = new StatusIndicator(this);
   statusIndicator->setMessage("Ready. Enhancement is currently bypassed.");
 
   auto *soundSurface = new QWidget(this);
   soundSurface->setObjectName("soundSurface");
+  soundSurface->setMinimumWidth(kMinimumSoundSurfaceWidth);
+  soundSurface->setSizePolicy(QSizePolicy::MinimumExpanding,
+                              QSizePolicy::Expanding);
   auto *soundSurfaceLayout = new QHBoxLayout(soundSurface);
   soundSurfaceLayout->setContentsMargins(22, 22, 22, 22);
   soundSurfaceLayout->setSpacing(22);
@@ -149,23 +159,48 @@ void MainWindow::setupUi() {
   effectControls->setValues(PresetFactory::defaultEffectValues());
   equalizerPanel = new EqualizerPanel(this);
 
-  soundSurfaceLayout->addWidget(effectControls, 1);
-  soundSurfaceLayout->addWidget(equalizerPanel, 4);
+  soundSurfaceLayout->addWidget(effectControls, 0);
+  soundSurfaceLayout->addWidget(equalizerPanel, 1);
 
   enhancementToggle = new EnhancementToggle(this);
 
-  pageLayout->addLayout(headerLayout);
-  pageLayout->addWidget(divider);
   mainPanelLayout->addLayout(topControls);
+  mainPanelLayout->addLayout(preferencesRow);
   mainPanelLayout->addWidget(soundSurface, 1);
   mainPanelLayout->addWidget(enhancementToggle);
   mainPanelLayout->addWidget(statusIndicator);
-  pageLayout->addWidget(mainPanel, 1);
+
+  auto *mainScrollArea = new QScrollArea(this);
+  mainScrollArea->setObjectName("mainScrollArea");
+  mainScrollArea->setFrameShape(QFrame::NoFrame);
+  mainScrollArea->setWidgetResizable(true);
+  mainScrollArea->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  mainScrollArea->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+  mainScrollArea->setWidget(mainPanel);
+
+  pageLayout->addLayout(headerLayout);
+  pageLayout->addWidget(divider);
+  pageLayout->addWidget(mainScrollArea, 1);
 
   setCentralWidget(central);
   setWindowTitle(QString::fromUtf8(AppConfig::applicationName.data()));
-  setMinimumSize(1360, 760);
+  setMinimumSize(kMinimumWindowWidth, kMinimumWindowHeight);
   resize(1500, 840);
+}
+
+void MainWindow::setupTray() {
+  trayManager = new TrayManager(this);
+  trayManager->setShowCallback([this]() { showFromTray(); });
+  trayManager->setToggleEnhancementCallback(
+      [this]() { requestToggleEnhancement(); });
+  trayManager->setDisableEnhancementCallback([this]() {
+    requestDisableEnhancement("Enhancement disabled. Audio is bypassed.");
+  });
+  trayManager->setAutoStartCallback(
+      [this](bool enabled) { setAutoStartEnabledFromUi(enabled); });
+  trayManager->setQuitCallback([this]() { requestQuit(); });
+  trayManager->setEnabledState(audioService.isEnabled());
+  trayManager->setAutoStartState(audioService.isAutoStartEnabled());
 }
 
 void MainWindow::loadDevices() {
@@ -189,6 +224,30 @@ void MainWindow::loadPresets() {
 }
 
 void MainWindow::setupConnections() {
+  connect(minimizeButton, &QPushButton::clicked, this,
+          [this]() { minimizeToTray(); });
+  connect(closeButton, &QPushButton::clicked, this,
+          [this]() { requestQuit(); });
+
+  connect(autoStartCheckBox, &QCheckBox::toggled, this,
+          [this](bool checked) { setAutoStartEnabledFromUi(checked); });
+  connect(startMinimizedCheckBox, &QCheckBox::toggled, this,
+          [this](bool checked) {
+            settingsStore.setStartMinimized(checked);
+            settingsStore.sync();
+            statusIndicator->setMessage(
+                checked ? "PulseForge will start minimized."
+                        : "PulseForge will open its window on launch.");
+          });
+  connect(minimizeToTrayCheckBox, &QCheckBox::toggled, this,
+          [this](bool checked) {
+            settingsStore.setMinimizeToTray(checked);
+            settingsStore.sync();
+            statusIndicator->setMessage(
+                checked ? "Closing the window will minimize to tray."
+                        : "Closing the window will quit PulseForge.");
+          });
+
   connect(deviceSelector->comboBox(),
           QOverload<int>::of(&QComboBox::currentIndexChanged), this,
           [this]() {
@@ -286,74 +345,14 @@ void MainWindow::setupConnections() {
     statusIndicator->setMessage("Preset saved: " + presetName.trimmed());
   });
 
-  connect(enhancementToggle->button(), &QPushButton::clicked, this, [this]() {
-    enhancementToggle->button()->setEnabled(false);
-    QPointer<MainWindow> self(this);
-    AudioService *service = &audioService;
-
-    if (audioService.isEnabled()) {
-      std::thread([self, service]() {
-        const bool disabled = service->disableEnhancement();
-        if (!self) {
-          return;
-        }
-        QMetaObject::invokeMethod(self, [self, disabled]() {
-          if (!self) {
-            return;
-          }
-          self->enhancementToggle->button()->setEnabled(true);
-          if (disabled) {
-            self->saveEnhancementEnabled(false);
-            self->setEnhancementActive(
-                false, "Enhancement disabled. Audio is bypassed.");
-          } else {
-            self->statusIndicator->setMessage(
-                "PulseForge could not disable enhancement.");
-          }
-        });
-      }).detach();
-      return;
-    }
-
-    const std::vector<float> gains = combinedEqualizerGains();
-    const std::vector<float> frequencies = equalizerPanel->frequencies();
-    const std::vector<int> effectValues = effectControls->values();
-    const float preampDb = effectControls->preampDb();
-    const float limiterCeilingDb = effectControls->limiterCeilingDb();
-    statusIndicator->setMessage("Enabling enhancement...");
-
-    std::thread([self, service, gains, frequencies, effectValues, preampDb,
-                 limiterCeilingDb]() {
-      service->applyPreset(PresetFactory::equalizer(
-          gains, frequencies, effectValues, preampDb, limiterCeilingDb));
-      const bool enabled = service->enableEnhancement();
-      if (!self) {
-        return;
-      }
-      QMetaObject::invokeMethod(self, [self, enabled]() {
-        if (!self) {
-          return;
-        }
-        self->enhancementToggle->button()->setEnabled(true);
-        if (enabled) {
-          self->saveEnhancementEnabled(true);
-          self->setEnhancementActive(
-              true, "Enhancement enabled. PulseForge is processing audio.");
-        } else {
-          self->saveEnhancementEnabled(false);
-          self->setEnhancementActive(false,
-                                     "PulseForge could not enable enhancement.");
-        }
-      });
-    }).detach();
-  });
+  connect(enhancementToggle->button(), &QPushButton::clicked, this,
+          [this]() { requestToggleEnhancement(); });
 }
 
 void MainWindow::restoreSettings() {
   restoringSettings = true;
-  QSettings settings = appSettings();
 
-  const QString savedSink = settings.value("audio/outputSinkName").toString();
+  const QString savedSink = settingsStore.selectedOutputSinkName();
   const bool previousDeviceSignalsBlocked =
       deviceSelector->comboBox()->blockSignals(true);
   if (deviceSelector->selectDeviceBySinkName(savedSink)) {
@@ -361,14 +360,12 @@ void MainWindow::restoreSettings() {
   }
   deviceSelector->comboBox()->blockSignals(previousDeviceSignalsBlocked);
 
-  const QString presetId =
-      settings.value("presets/lastPresetId", "flat").toString();
-  const QVariantList savedGains =
-      settings.value("presets/customEqGains").toList();
-  const QVariantList savedFrequencies =
-      settings.value("presets/customEqFrequencies").toList();
-  const QVariantList savedEffectValues =
-      settings.value("presets/customEffectValues").toList();
+  const QString presetId = settingsStore.lastPresetId();
+  const std::vector<float> savedGains = settingsStore.customEqGains();
+  const std::vector<float> savedFrequencies =
+      settingsStore.customEqFrequencies();
+  const std::vector<int> savedEffectValues =
+      settingsStore.customEffectValues();
   const bool previousPresetSignalsBlocked =
       presetSelector->comboBox()->blockSignals(true);
 
@@ -377,14 +374,14 @@ void MainWindow::restoreSettings() {
     customCurveActive = true;
     selectPresetById("custom-eq");
     if (savedFrequencies.size() == static_cast<int>(DspConfig::eqBandCount)) {
-      equalizerPanel->setFrequencies(floatsFromVariantList(savedFrequencies));
+      equalizerPanel->setFrequencies(savedFrequencies);
     }
     if (savedEffectValues.size() >= 5) {
-      effectControls->setValues(intsFromVariantList(savedEffectValues));
+      effectControls->setValues(savedEffectValues);
     } else {
       effectControls->setValues(PresetFactory::defaultEffectValues());
     }
-    equalizerPanel->setGains(floatsFromVariantList(savedGains));
+    equalizerPanel->setGains(savedGains);
     applyCurrentEqualizerCurveLive();
   } else if (selectPresetById(presetId)) {
     if (const auto preset = PresetFactory::presetById(presetId.toStdString())) {
@@ -407,10 +404,20 @@ void MainWindow::restoreSettings() {
   }
   presetSelector->comboBox()->blockSignals(previousPresetSignalsBlocked);
 
+  const bool startMinimizedSignalsBlocked =
+      startMinimizedCheckBox->blockSignals(true);
+  const bool minimizeToTraySignalsBlocked =
+      minimizeToTrayCheckBox->blockSignals(true);
+  startMinimizedCheckBox->setChecked(settingsStore.startMinimized());
+  minimizeToTrayCheckBox->setChecked(settingsStore.minimizeToTray());
+  startMinimizedCheckBox->blockSignals(startMinimizedSignalsBlocked);
+  minimizeToTrayCheckBox->blockSignals(minimizeToTraySignalsBlocked);
+  setAutoStartChecked(audioService.isAutoStartEnabled());
+
   restoringSettings = false;
 
-  if (settings.value("audio/enhancementEnabled", false).toBool()) {
-    enhancementToggle->button()->setEnabled(false);
+  if (settingsStore.enhancementEnabled()) {
+    setEnhancementOperationBusy(true);
     QPointer<MainWindow> self(this);
     AudioService *service = &audioService;
     std::thread([self, service]() {
@@ -422,11 +429,14 @@ void MainWindow::restoreSettings() {
         if (!self) {
           return;
         }
-        self->enhancementToggle->button()->setEnabled(true);
+        self->setEnhancementOperationBusy(false);
         self->saveEnhancementEnabled(enabled);
         self->setEnhancementActive(
             enabled, enabled ? "Enhancement restored from last session."
                              : "PulseForge could not restore enhancement.");
+        if (self->quitRequested) {
+          self->beginQuitCleanup();
+        }
       });
     }).detach();
   } else {
@@ -439,31 +449,295 @@ void MainWindow::saveSettings() const {
     return;
   }
 
-  QSettings settings = appSettings();
-  settings.setValue("audio/outputSinkName", deviceSelector->currentSinkName());
-  settings.setValue("presets/lastPresetId",
-                    customCurveActive
-                        ? QString("custom-eq")
+  settingsStore.setSelectedOutputSinkName(deviceSelector->currentSinkName());
+  settingsStore.setLastPresetId(
+      customCurveActive ? QString("custom-eq")
                         : presetSelector->comboBox()->currentData().toString());
-  settings.setValue("presets/customEqGains",
-                    floatsToVariantList(equalizerPanel->gains()));
-  settings.setValue("presets/customEqFrequencies",
-                    floatsToVariantList(equalizerPanel->frequencies()));
-  settings.setValue("presets/customEffectValues",
-                    intsToVariantList(effectControls->values()));
-  settings.sync();
+  settingsStore.setCustomEqGains(equalizerPanel->gains());
+  settingsStore.setCustomEqFrequencies(equalizerPanel->frequencies());
+  settingsStore.setCustomEffectValues(effectControls->values());
+  settingsStore.setStartMinimized(startMinimizedCheckBox->isChecked());
+  settingsStore.setMinimizeToTray(minimizeToTrayCheckBox->isChecked());
+  settingsStore.setStartOnLoginPreference(autoStartCheckBox->isChecked());
+  settingsStore.sync();
 }
 
 void MainWindow::saveEnhancementEnabled(bool enabled) const {
-  QSettings settings = appSettings();
-  settings.setValue("audio/enhancementEnabled", enabled);
-  settings.sync();
+  settingsStore.setEnhancementEnabled(enabled);
+  settingsStore.sync();
+}
+
+void MainWindow::showFirstRunDialog() {
+  if (settingsStore.firstRunComplete()) {
+    return;
+  }
+
+  const QMessageBox::StandardButton answer = QMessageBox::question(
+      this, "Welcome to PulseForge",
+      "PulseForge creates a virtual audio sink, routes app audio through its "
+      "DSP engine, and plays the enhanced result through your selected output "
+      "device.\n\n"
+      "Closing the window can keep PulseForge running in the tray. You can "
+      "change the output device and startup behavior from the main window.\n\n"
+      "Enable Start on login now?",
+      QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+
+  settingsStore.setFirstRunComplete(true);
+  settingsStore.sync();
+
+  if (answer == QMessageBox::Yes) {
+    setAutoStartEnabledFromUi(true);
+  }
 }
 
 void MainWindow::setEnhancementActive(bool active, const QString &message) {
   enhancementToggle->setEnabledState(active);
   statusIndicator->setActive(active);
   statusIndicator->setMessage(message);
+  if (trayManager) {
+    trayManager->setEnabledState(active);
+  }
+}
+
+void MainWindow::setEnhancementOperationBusy(bool busy) {
+  enhancementOperationInProgress = busy;
+  enhancementToggle->button()->setEnabled(!busy);
+  if (trayManager) {
+    trayManager->setBusy(busy);
+  }
+}
+
+void MainWindow::requestToggleEnhancement() {
+  if (enhancementOperationInProgress) {
+    return;
+  }
+
+  if (audioService.isEnabled()) {
+    requestDisableEnhancement("Enhancement disabled. Audio is bypassed.");
+    return;
+  }
+
+  requestEnableEnhancement();
+}
+
+void MainWindow::requestEnableEnhancement() {
+  if (enhancementOperationInProgress) {
+    return;
+  }
+
+  setEnhancementOperationBusy(true);
+  const std::vector<float> gains = combinedEqualizerGains();
+  const std::vector<float> frequencies = equalizerPanel->frequencies();
+  const std::vector<int> effectValues = effectControls->values();
+  const float preampDb = effectControls->preampDb();
+  const float limiterCeilingDb = effectControls->limiterCeilingDb();
+  statusIndicator->setMessage("Enabling enhancement...");
+
+  QPointer<MainWindow> self(this);
+  AudioService *service = &audioService;
+  std::thread([self, service, gains, frequencies, effectValues, preampDb,
+               limiterCeilingDb]() {
+    service->applyPreset(PresetFactory::equalizer(
+        gains, frequencies, effectValues, preampDb, limiterCeilingDb));
+    const bool enabled = service->enableEnhancement();
+    if (!self) {
+      return;
+    }
+    QMetaObject::invokeMethod(self, [self, enabled]() {
+      if (!self) {
+        return;
+      }
+      self->setEnhancementOperationBusy(false);
+      if (enabled) {
+        self->saveEnhancementEnabled(true);
+        self->setEnhancementActive(
+            true, "Enhancement enabled. PulseForge is processing audio.");
+      } else {
+        self->saveEnhancementEnabled(false);
+        self->setEnhancementActive(false,
+                                   "PulseForge could not enable enhancement.");
+      }
+
+      if (self->quitRequested) {
+        self->beginQuitCleanup();
+      }
+    });
+  }).detach();
+}
+
+void MainWindow::requestDisableEnhancement(const QString &successMessage) {
+  if (enhancementOperationInProgress) {
+    return;
+  }
+
+  if (!audioService.isEnabled()) {
+    saveEnhancementEnabled(false);
+    setEnhancementActive(false, "Enhancement is already bypassed.");
+    return;
+  }
+
+  setEnhancementOperationBusy(true);
+  statusIndicator->setMessage("Disabling enhancement...");
+  QPointer<MainWindow> self(this);
+  AudioService *service = &audioService;
+
+  std::thread([self, service, successMessage]() {
+    const bool disabled = service->disableEnhancement();
+    if (!self) {
+      return;
+    }
+    QMetaObject::invokeMethod(self, [self, disabled, successMessage]() {
+      if (!self) {
+        return;
+      }
+      self->setEnhancementOperationBusy(false);
+      if (disabled) {
+        self->saveEnhancementEnabled(false);
+        self->setEnhancementActive(false, successMessage);
+      } else {
+        self->statusIndicator->setMessage(
+            "PulseForge could not fully disable enhancement.");
+      }
+
+      if (self->quitRequested) {
+        QApplication::quit();
+      }
+    });
+  }).detach();
+}
+
+void MainWindow::requestQuit() {
+  quitRequested = true;
+
+  if (enhancementOperationInProgress) {
+    statusIndicator->setMessage("Waiting for audio operation to finish...");
+    return;
+  }
+
+  beginQuitCleanup();
+}
+
+void MainWindow::beginQuitCleanup() {
+  if (quitCleanupInProgress) {
+    return;
+  }
+
+  quitCleanupInProgress = true;
+  saveSettings();
+
+  if (!audioService.isEnabled()) {
+    saveEnhancementEnabled(false);
+    QApplication::quit();
+    return;
+  }
+
+  setEnhancementOperationBusy(true);
+  statusIndicator->setMessage("Restoring audio routing before quit...");
+  QPointer<MainWindow> self(this);
+  AudioService *service = &audioService;
+
+  std::thread([self, service]() {
+    service->disableEnhancement();
+    if (!self) {
+      return;
+    }
+    QMetaObject::invokeMethod(self, [self]() {
+      if (!self) {
+        return;
+      }
+      self->saveEnhancementEnabled(false);
+      self->setEnhancementOperationBusy(false);
+      self->setEnhancementActive(false, "Enhancement disabled.");
+      QApplication::quit();
+    });
+  }).detach();
+}
+
+void MainWindow::minimizeToTray() {
+  if (settingsStore.minimizeToTray() && trayManager &&
+      trayManager->isAvailable()) {
+    statusIndicator->setMessage("PulseForge is still running in the tray.");
+    hide();
+    trayManager->showStillRunningMessageOnce();
+    return;
+  }
+
+  showMinimized();
+}
+
+void MainWindow::showFromTray() {
+  showNormal();
+  raise();
+  activateWindow();
+}
+
+void MainWindow::startHiddenInTray() {
+  if (trayManager && trayManager->isAvailable()) {
+    hide();
+    return;
+  }
+
+  showMinimized();
+}
+
+void MainWindow::closeEvent(QCloseEvent *event) {
+  if (quitRequested) {
+    event->accept();
+    return;
+  }
+
+  if (settingsStore.minimizeToTray() && trayManager &&
+      trayManager->isAvailable()) {
+    event->ignore();
+    minimizeToTray();
+    return;
+  }
+
+  event->ignore();
+  requestQuit();
+}
+
+void MainWindow::setAutoStartEnabledFromUi(bool enabled) {
+  setAutoStartChecked(enabled);
+  settingsStore.setStartOnLoginPreference(enabled);
+  settingsStore.sync();
+
+  QPointer<MainWindow> self(this);
+  AudioService *service = &audioService;
+  std::thread([self, service, enabled]() {
+    const bool ok = enabled ? service->enableAutoStart()
+                            : service->disableAutoStart();
+    if (!self) {
+      return;
+    }
+    QMetaObject::invokeMethod(self, [self, enabled, ok]() {
+      if (!self) {
+        return;
+      }
+
+      if (!ok) {
+        self->setAutoStartChecked(!enabled);
+        self->settingsStore.setStartOnLoginPreference(!enabled);
+        self->settingsStore.sync();
+        self->statusIndicator->setMessage(
+            "PulseForge could not update start-on-login.");
+        return;
+      }
+
+      self->statusIndicator->setMessage(
+          enabled ? "PulseForge will start on login."
+                  : "Start on login disabled.");
+    });
+  }).detach();
+}
+
+void MainWindow::setAutoStartChecked(bool enabled) {
+  const bool blocked = autoStartCheckBox->blockSignals(true);
+  autoStartCheckBox->setChecked(enabled);
+  autoStartCheckBox->blockSignals(blocked);
+  if (trayManager) {
+    trayManager->setAutoStartState(enabled);
+  }
 }
 
 void MainWindow::applyPresetLive(const Preset &preset,

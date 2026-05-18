@@ -78,6 +78,13 @@ float BiquadFilter::process(float sample) {
   z1 = b1 * sample - a1 * output + z2;
   z2 = b2 * sample - a2 * output;
 
+  if (std::abs(z1) < DspConfig::denormalFloor) {
+    z1 = 0.0f;
+  }
+  if (std::abs(z2) < DspConfig::denormalFloor) {
+    z2 = 0.0f;
+  }
+
   if (!valid(output) || !valid(z1) || !valid(z2)) {
     reset();
     return 0.0f;

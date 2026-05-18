@@ -4,10 +4,13 @@
 #include "core/AppConfig.hpp"
 #include "gui/MainWindow.hpp"
 #include "service/AudioService.hpp"
+#include "system/RuntimeDependencyChecker.hpp"
+#include "system/SettingsStore.hpp"
 
 #include <QCoreApplication>
 #include <QDebug>
 #include <QFile>
+#include <QMessageBox>
 #include <QString>
 #include <QStringList>
 #include <QTextStream>
@@ -53,30 +56,42 @@ void loadStyleSheet(QApplication &app) {
 
 int main(int argc, char *argv[]) {
   QApplication app(argc, argv);
+  QApplication::setQuitOnLastWindowClosed(false);
   QCoreApplication::setApplicationName(
       QString::fromUtf8(AppConfig::applicationName.data()));
   QCoreApplication::setOrganizationName(
       QString::fromUtf8(AppConfig::organizationName.data()));
   QApplication::setDesktopFileName(
-      QString::fromUtf8(AppConfig::desktopFileName.data()));
+      QString::fromUtf8(AppConfig::applicationId.data()));
 
   bool startInBackground = false;
   for (int i = 1; i < argc; ++i) {
     const QString argument = QString::fromLocal8Bit(argv[i]);
-    if (argument == "--background" || argument == "--minimized") {
+    if (argument == "--start-minimized" || argument == "--background" ||
+        argument == "--minimized") {
       startInBackground = true;
     }
+  }
+
+  loadStyleSheet(app);
+
+  RuntimeDependencyChecker dependencyChecker;
+  const RuntimeDependencyChecker::Result dependencyResult =
+      dependencyChecker.check();
+  if (!dependencyResult.ok) {
+    QMessageBox::critical(nullptr, "PulseForge Runtime Requirements",
+                          dependencyResult.userMessage());
+    return 1;
   }
 
   PipeWireBackend backend;
   AudioService audioService(backend);
   audioService.initialize();
 
-  loadStyleSheet(app);
-
   MainWindow window(audioService);
-  if (startInBackground) {
-    window.showMinimized();
+  const SettingsStore settingsStore;
+  if (startInBackground || settingsStore.startMinimized()) {
+    window.startHiddenInTray();
   } else {
     window.show();
   }

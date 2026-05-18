@@ -22,10 +22,13 @@ add_executable(pulseforge
     src/service/AudioService.cpp
     src/system/AutoStartManager.cpp
     src/system/ProcessRunner.cpp
+    src/system/RuntimeDependencyChecker.cpp
     src/system/RuntimeStateStore.cpp
+    src/system/SettingsStore.cpp
     src/presets/PresetFactory.cpp
     src/presets/PresetStore.cpp
     src/gui/MainWindow.cpp
+    src/gui/TrayManager.cpp
     src/gui/components/CardContainer.cpp
     src/gui/components/DeviceSelector.cpp
     src/gui/components/EnhancementToggle.cpp
@@ -61,15 +64,19 @@ install(TARGETS pulseforge
     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 )
 
-install(FILES data/pulseforge.desktop
+install(FILES data/io.github.MoeAra.PulseForge.desktop
     DESTINATION ${CMAKE_INSTALL_DATADIR}/applications
+)
+
+install(FILES data/icons/pulseforge.png
+    DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps
 )
 
 install(FILES data/icons/pulseforge.svg
     DESTINATION ${CMAKE_INSTALL_DATADIR}/icons/hicolor/scalable/apps
 )
 
-install(FILES data/metainfo/io.github.Moe_Ara.PulseForge.metainfo.xml
+install(FILES data/metainfo/io.github.MoeAra.PulseForge.metainfo.xml
     DESTINATION ${CMAKE_INSTALL_DATADIR}/metainfo
 )
 

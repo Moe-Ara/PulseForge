@@ -88,6 +88,12 @@ The backend creates a virtual sink with `pactl`, makes it the default sink while
 enhancement is enabled, and starts `AudioProcessor` to capture from the monitor
 stream and play processed audio to the selected PipeWire sink.
 
+The virtual sink monitor is also visible to the desktop as a source. Backend
+startup tracks the previous default source and ensures
+`pulseforge_enhanced.monitor` does not become the system default microphone.
+This protects chat apps that follow the default source while avoiding unsafe
+movement of PulseForge's own capture stream.
+
 If the in-process processor cannot start, the backend may fall back to a simple
 loopback path where supported. DSP should always be implemented in C++ inside
 PulseForge rather than through external plugin chains.
@@ -132,6 +138,9 @@ DSP components live in `src/dsp/`:
 When adding DSP features, first define how presets represent the feature, then
 map that representation in `AudioProcessor::setEffectChain()`. Keep processing
 state preallocated and callback-safe.
+
+See [DSP_AUDIT.md](DSP_AUDIT.md) for the current tuning notes, safety
+guardrails, and preset intent.
 
 ## Presets
 
@@ -183,8 +192,8 @@ cmake --build build
 When available, also run:
 
 ```bash
-desktop-file-validate data/pulseforge.desktop
-appstreamcli validate --no-net data/metainfo/io.github.Moe_Ara.PulseForge.metainfo.xml
+desktop-file-validate data/io.github.MoeAra.PulseForge.desktop
+appstreamcli validate --no-net data/metainfo/io.github.MoeAra.PulseForge.metainfo.xml
 ```
 
 For audio changes, manually check:

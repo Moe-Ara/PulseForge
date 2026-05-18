@@ -12,10 +12,14 @@ public:
   void configureLimiter(float ceilingDb, bool enabled);
   void process(float *left, float *right, uint32_t frames, float sampleRate);
   void reset();
+  void resetMetering();
 
   bool compressorActive() const;
   bool limiterActive() const;
   float limiterCeilingLinear() const;
+  float recentPeakLinear() const;
+  uint64_t limiterActivationCount() const;
+  uint64_t clippedSampleCount() const;
 
 private:
   std::atomic<float> thresholdDb = DspConfig::defaultCompressorThresholdDb;
@@ -25,6 +29,10 @@ private:
   std::atomic<float> ceilingLinear = DspConfig::defaultLimiterCeilingLinear;
   std::atomic<bool> compressorEnabled = false;
   std::atomic<bool> limiterEnabled = true;
+  std::atomic<float> recentPeak = 0.0f;
+  std::atomic<uint64_t> limiterActivations = 0;
+  std::atomic<uint64_t> clippedSamples = 0;
 
   float envelope = 0.0f;
+  float limiterGain = 1.0f;
 };

@@ -162,17 +162,23 @@ bool PipeWireBackend::enable() {
     return false;
   }
   selectedSinkName = targetSink;
+  previousDefaultSourceName.clear();
+  defaultSourceChangedByPulseForge = false;
+  rememberDefaultSource();
 
   if (!createVirtualSink()) {
     return false;
   }
+  ensureDefaultSourceIsolated();
 
   if (!rememberDefaultSink()) {
+    restorePreviousDefaultSource();
     removeVirtualSink();
     return false;
   }
 
   if (!setDefaultSink(virtualSinkName)) {
+    restorePreviousDefaultSource();
     restorePreviousDefaultSink();
     removeVirtualSink();
     return false;
@@ -184,6 +190,7 @@ bool PipeWireBackend::enable() {
   }
 
   if (!usingProcessor && !createLoopback()) {
+    restorePreviousDefaultSource();
     restorePreviousDefaultSink();
     removeVirtualSink();
     clearRuntimeState();
@@ -206,13 +213,14 @@ bool PipeWireBackend::disable() {
 
   audioProcessor.stop();
   const bool loopbackRemoved = removeLoopback();
+  const bool sourceRestored = restorePreviousDefaultSource();
   const bool defaultRestored = restorePreviousDefaultSink();
   const bool sinkRemoved = removeVirtualSink();
   clearRuntimeState();
   enabled = false;
   usingAudioProcessor = false;
 
-  return loopbackRemoved && defaultRestored && sinkRemoved;
+  return loopbackRemoved && sourceRestored && defaultRestored && sinkRemoved;
 }
 
 bool PipeWireBackend::setTargetDevice(const std::string &deviceId) {
@@ -435,6 +443,77 @@ bool PipeWireBackend::restorePreviousDefaultSink() {
   return restored;
 }
 
+bool PipeWireBackend::rememberDefaultSource() {
+  std::string defaultSource;
+  if (!routing.getDefaultSource(defaultSource)) {
+    Logger::warn(
+        "Mic isolation could not read the current default source. Continuing.");
+    return true;
+  }
+
+  if (defaultSource != monitorSourceName) {
+    previousDefaultSourceName = defaultSource;
+  }
+
+  Logger::info("Previous default source: " + previousDefaultSourceName);
+  return true;
+}
+
+bool PipeWireBackend::ensureDefaultSourceIsolated() {
+  std::string defaultSource;
+  if (!routing.getDefaultSource(defaultSource)) {
+    return true;
+  }
+
+  if (defaultSource != monitorSourceName) {
+    return true;
+  }
+
+  if (previousDefaultSourceName.empty()) {
+    Logger::warn("Mic isolation detected PulseForge monitor as the default "
+                 "source, but no previous microphone source is known.");
+    return true;
+  }
+
+  if (!routing.setDefaultSource(previousDefaultSourceName)) {
+    Logger::warn("Mic isolation could not restore the previous microphone "
+                 "source. Discord may hear the PulseForge monitor if it uses "
+                 "the default source.");
+    return false;
+  }
+
+  defaultSourceChangedByPulseForge = true;
+  Logger::info("Mic isolation restored default source away from PulseForge "
+               "monitor: " +
+               previousDefaultSourceName);
+  return true;
+}
+
+bool PipeWireBackend::restorePreviousDefaultSource() {
+  if (!defaultSourceChangedByPulseForge || previousDefaultSourceName.empty()) {
+    previousDefaultSourceName.clear();
+    defaultSourceChangedByPulseForge = false;
+    return true;
+  }
+
+  std::string currentSource;
+  if (routing.getDefaultSource(currentSource) &&
+      currentSource != monitorSourceName) {
+    previousDefaultSourceName.clear();
+    defaultSourceChangedByPulseForge = false;
+    return true;
+  }
+
+  const bool restored = routing.setDefaultSource(previousDefaultSourceName);
+  if (restored) {
+    Logger::info("Restored previous default source: " +
+                 previousDefaultSourceName);
+    previousDefaultSourceName.clear();
+    defaultSourceChangedByPulseForge = false;
+  }
+  return restored;
+}
+
 bool PipeWireBackend::cleanupStaleModules() {
   RuntimeState state;
   if (!runtimeStateStore.load(state)) {
@@ -473,7 +552,8 @@ bool PipeWireBackend::cleanupStaleModules() {
 bool PipeWireBackend::saveRuntimeState() const {
   return runtimeStateStore.save(
       {virtualSinkModuleId, loopbackModuleId, previousDefaultSinkName,
-       virtualSinkName});
+       previousDefaultSourceName, virtualSinkName,
+       defaultSourceChangedByPulseForge});
 }
 
 bool PipeWireBackend::clearRuntimeState() const {
@@ -486,21 +566,39 @@ bool PipeWireBackend::restoreDefaultSinkFromRuntimeState() {
     return true;
   }
 
-  if (state.previousDefaultSinkName.empty()) {
-    return true;
-  }
-
+  bool ok = true;
   std::string currentDefault;
-  if (routing.getDefaultSink(currentDefault) &&
+  if (!state.previousDefaultSinkName.empty() &&
+      routing.getDefaultSink(currentDefault) &&
       currentDefault == virtualSinkName) {
     if (!setDefaultSink(state.previousDefaultSinkName)) {
-      return false;
+      ok = false;
+    } else {
+      Logger::info("Restored default sink from previous PulseForge session: " +
+                   state.previousDefaultSinkName);
     }
-    Logger::info("Restored default sink from previous PulseForge session: " +
-                 state.previousDefaultSinkName);
   }
 
-  return true;
+  const std::string stateMonitorSource =
+      state.processingSinkName.empty()
+          ? monitorSourceName
+          : state.processingSinkName + ".monitor";
+  std::string currentSource;
+  if (state.defaultSourceChangedByPulseForge &&
+      !state.previousDefaultSourceName.empty() &&
+      routing.getDefaultSource(currentSource) &&
+      (currentSource == monitorSourceName ||
+       currentSource == stateMonitorSource)) {
+    if (!routing.setDefaultSource(state.previousDefaultSourceName)) {
+      ok = false;
+    } else {
+      Logger::info("Restored default source from previous PulseForge "
+                   "session: " +
+                   state.previousDefaultSourceName);
+    }
+  }
+
+  return ok;
 }
 
 std::string PipeWireBackend::resolveTargetSinkName() const {

@@ -45,6 +45,9 @@ private:
   bool rememberDefaultSink();
   bool setDefaultSink(const std::string &sinkName);
   bool restorePreviousDefaultSink();
+  bool rememberDefaultSource();
+  bool ensureDefaultSourceIsolated();
+  bool restorePreviousDefaultSource();
   bool cleanupStaleModules();
   bool saveRuntimeState() const;
   bool clearRuntimeState() const;
@@ -73,7 +76,9 @@ private:
       std::string(AudioConfig::virtualSinkDisplayName);
   std::string monitorSourceName = std::string(AudioConfig::monitorSourceName);
   std::string previousDefaultSinkName;
+  std::string previousDefaultSourceName;
   std::string selectedSinkName;
+  bool defaultSourceChangedByPulseForge = false;
 
   int virtualSinkModuleId = -1;
   int loopbackModuleId = -1;
