@@ -1,8 +1,10 @@
 #pragma once
 #include <QMainWindow>
+#include <QPoint>
 #include <QString>
 #include <vector>
 
+class QBoxLayout;
 class DeviceSelector;
 class EnhancementToggle;
 class EffectControls;
@@ -10,6 +12,8 @@ class EqualizerPanel;
 class PresetSelector;
 class QCheckBox;
 class QPushButton;
+class QResizeEvent;
+class QMouseEvent;
 class StatusIndicator;
 class TrayManager;
 class QCloseEvent;
@@ -29,6 +33,10 @@ public:
 
 protected:
   void closeEvent(QCloseEvent *event) override;
+  void resizeEvent(QResizeEvent *event) override;
+  void mousePressEvent(QMouseEvent *event) override;
+  void mouseMoveEvent(QMouseEvent *event) override;
+  void mouseReleaseEvent(QMouseEvent *event) override;
 
 private:
   void setupUi();
@@ -55,6 +63,7 @@ private:
   void showFromTray();
   void setAutoStartEnabledFromUi(bool enabled);
   void setAutoStartChecked(bool enabled);
+  void updateResponsiveLayout(int width);
 
 private:
   AudioService &audioService;
@@ -70,6 +79,9 @@ private:
   QCheckBox *autoStartCheckBox = nullptr;
   QCheckBox *startMinimizedCheckBox = nullptr;
   QCheckBox *minimizeToTrayCheckBox = nullptr;
+  QBoxLayout *topControlsLayout = nullptr;
+  QBoxLayout *preferencesLayout = nullptr;
+  QBoxLayout *soundSurfaceLayout = nullptr;
   QPushButton *minimizeButton = nullptr;
   QPushButton *closeButton = nullptr;
   bool customCurveActive = false;
@@ -77,4 +89,6 @@ private:
   bool enhancementOperationInProgress = false;
   bool quitRequested = false;
   bool quitCleanupInProgress = false;
+  bool draggingWindow = false;
+  QPoint windowDragOffset;
 };

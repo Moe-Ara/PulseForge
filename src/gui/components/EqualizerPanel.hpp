@@ -7,6 +7,7 @@
 
 class QSlider;
 class QSpinBox;
+class QGridLayout;
 
 class EqualizerPanel : public CardContainer {
 public:
@@ -18,6 +19,7 @@ public:
   void setFrequencies(const std::vector<float> &frequencies);
   void setGainsChangedHandler(
       std::function<void(const std::vector<float> &)> handler);
+  void setCompactMode(bool compact);
 
 private:
   std::vector<float> currentGains;
@@ -25,5 +27,8 @@ private:
   std::vector<QSlider *> sliders;
   std::vector<QSpinBox *> frequencyInputs;
   std::function<void(const std::vector<float> &)> gainsChangedHandler;
+  QWidget *equalizerBody = nullptr;
+  QGridLayout *equalizerLayout = nullptr;
   bool suppressChangeNotifications = false;
+  bool compactMode = false;
 };

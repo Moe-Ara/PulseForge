@@ -8,6 +8,7 @@
 #include <QSizePolicy>
 #include <QSlider>
 #include <QSpinBox>
+#include <QStyle>
 #include <QStringList>
 #include <algorithm>
 #include <cmath>
@@ -18,9 +19,12 @@ namespace {
 constexpr int kSliderMinimumDb = -12;
 constexpr int kSliderMaximumDb = 12;
 constexpr int kSliderTickIntervalDb = 6;
-constexpr int kSliderHeight = 150;
-constexpr int kBandColumnWidth = 72;
-constexpr int kEqualizerMinimumWidth = 770;
+constexpr int kSliderHeight = 128;
+constexpr int kCompactSliderHeight = 108;
+constexpr int kBandColumnWidth = 64;
+constexpr int kCompactBandColumnWidth = 48;
+constexpr int kEqualizerMinimumWidth = 640;
+constexpr int kCompactEqualizerMinimumWidth = 520;
 
 class FrequencySpinBox : public QSpinBox {
 public:
@@ -59,23 +63,23 @@ protected:
 EqualizerPanel::EqualizerPanel(QWidget *parent)
     : CardContainer("Equalizer", "Subtle tuning for clarity and warmth.",
                     parent) {
-  auto *equalizer = new QWidget(this);
-  equalizer->setObjectName("equalizerPanel");
-  equalizer->setMinimumWidth(kEqualizerMinimumWidth);
-  equalizer->setSizePolicy(QSizePolicy::MinimumExpanding,
-                           QSizePolicy::Expanding);
+  equalizerBody = new QWidget(this);
+  equalizerBody->setObjectName("equalizerPanel");
+  equalizerBody->setMinimumWidth(kEqualizerMinimumWidth);
+  equalizerBody->setSizePolicy(QSizePolicy::MinimumExpanding,
+                               QSizePolicy::Expanding);
 
-  auto *layout = new QGridLayout(equalizer);
-  layout->setContentsMargins(18, 16, 18, 14);
-  layout->setHorizontalSpacing(14);
-  layout->setVerticalSpacing(10);
+  equalizerLayout = new QGridLayout(equalizerBody);
+  equalizerLayout->setContentsMargins(16, 14, 16, 12);
+  equalizerLayout->setHorizontalSpacing(10);
+  equalizerLayout->setVerticalSpacing(8);
 
   const QStringList gainScale = {"+12", "+6", "0", "-6", "-12"};
   for (int i = 0; i < gainScale.size(); ++i) {
     auto *scaleLabel = new QLabel(gainScale.at(i), this);
     scaleLabel->setObjectName(i == 2 ? "zeroDbLabel" : "dbLabel");
     scaleLabel->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    layout->addWidget(scaleLabel, i, 0);
+    equalizerLayout->addWidget(scaleLabel, i, 0);
   }
 
   currentGains.reserve(DspConfig::eqBandCount);
@@ -134,14 +138,14 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
                        }
                      });
 
-    layout->addWidget(gainLabel, 0, i + 1);
-    layout->addWidget(slider, 1, i + 1, 3, 1, Qt::AlignHCenter);
-    layout->addWidget(frequencyInput, 4, i + 1);
-    layout->setColumnMinimumWidth(i + 1, kBandColumnWidth);
-    layout->setColumnStretch(i + 1, 1);
+    equalizerLayout->addWidget(gainLabel, 0, i + 1);
+    equalizerLayout->addWidget(slider, 1, i + 1, 3, 1, Qt::AlignHCenter);
+    equalizerLayout->addWidget(frequencyInput, 4, i + 1);
+    equalizerLayout->setColumnMinimumWidth(i + 1, kBandColumnWidth);
+    equalizerLayout->setColumnStretch(i + 1, 1);
   }
 
-  contentLayout()->addWidget(equalizer);
+  contentLayout()->addWidget(equalizerBody);
 }
 
 std::vector<float> EqualizerPanel::gains() const {
@@ -173,4 +177,41 @@ void EqualizerPanel::setFrequencies(const std::vector<float> &frequencies) {
 void EqualizerPanel::setGainsChangedHandler(
     std::function<void(const std::vector<float> &)> handler) {
   gainsChangedHandler = std::move(handler);
+}
+
+void EqualizerPanel::setCompactMode(bool compact) {
+  if (compactMode == compact) {
+    return;
+  }
+
+  compactMode = compact;
+  const int columnWidth = compact ? kCompactBandColumnWidth : kBandColumnWidth;
+  const int sliderHeight = compact ? kCompactSliderHeight : kSliderHeight;
+
+  if (equalizerBody) {
+    equalizerBody->setMinimumWidth(compact ? kCompactEqualizerMinimumWidth
+                                           : kEqualizerMinimumWidth);
+    equalizerBody->setProperty("compact", compact);
+    equalizerBody->style()->unpolish(equalizerBody);
+    equalizerBody->style()->polish(equalizerBody);
+  }
+
+  if (equalizerLayout) {
+    equalizerLayout->setContentsMargins(compact ? 12 : 16, compact ? 10 : 14,
+                                        compact ? 12 : 16, compact ? 10 : 12);
+    equalizerLayout->setHorizontalSpacing(compact ? 6 : 10);
+    equalizerLayout->setVerticalSpacing(compact ? 5 : 8);
+    for (int column = 1; column <= static_cast<int>(sliders.size()); ++column) {
+      equalizerLayout->setColumnMinimumWidth(column, columnWidth);
+    }
+  }
+
+  for (auto *slider : sliders) {
+    slider->setFixedHeight(sliderHeight);
+    slider->setMinimumWidth(columnWidth);
+  }
+
+  for (auto *frequencyInput : frequencyInputs) {
+    frequencyInput->setMinimumWidth(columnWidth);
+  }
 }

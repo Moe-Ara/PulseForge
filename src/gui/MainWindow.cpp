@@ -14,6 +14,7 @@
 #include "../dsp/DspConfig.hpp"
 
 #include <QApplication>
+#include <QBoxLayout>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -24,6 +25,7 @@
 #include <QLineEdit>
 #include <QMetaObject>
 #include <QMessageBox>
+#include <QMouseEvent>
 #include <QPointer>
 #include <QPushButton>
 #include <QScrollArea>
@@ -42,10 +44,12 @@ std::vector<float> opennessGains() {
           1.0f, 1.4f, 1.2f, 0.7f};
 }
 
-constexpr int kMinimumWindowWidth = 980;
-constexpr int kMinimumWindowHeight = 680;
-constexpr int kMinimumContentWidth = 1080;
-constexpr int kMinimumSoundSurfaceWidth = 1000;
+constexpr int kMinimumWindowWidth = 840;
+constexpr int kMinimumWindowHeight = 660;
+constexpr int kMinimumContentWidth = 760;
+constexpr int kCompactLayoutWidth = 1120;
+constexpr int kCompactHeight = 780;
+constexpr int kDraggableHeaderHeight = 76;
 
 } // namespace
 
@@ -67,6 +71,8 @@ MainWindow::~MainWindow() {
 }
 
 void MainWindow::setupUi() {
+  setWindowFlag(Qt::FramelessWindowHint, true);
+
   auto *central = new QWidget(this);
   central->setObjectName("appRoot");
 
@@ -75,7 +81,7 @@ void MainWindow::setupUi() {
   pageLayout->setSpacing(0);
 
   auto *headerLayout = new QHBoxLayout();
-  headerLayout->setContentsMargins(28, 22, 28, 22);
+  headerLayout->setContentsMargins(28, 14, 28, 14);
   headerLayout->setSpacing(10);
 
   auto *brandMark = new QLabel("▮▮▮", this);
@@ -111,11 +117,11 @@ void MainWindow::setupUi() {
   mainPanel->setObjectName("mainPanel");
   mainPanel->setMinimumWidth(kMinimumContentWidth);
   auto *mainPanelLayout = new QVBoxLayout(mainPanel);
-  mainPanelLayout->setContentsMargins(30, 28, 30, 34);
-  mainPanelLayout->setSpacing(22);
+  mainPanelLayout->setContentsMargins(26, 20, 26, 22);
+  mainPanelLayout->setSpacing(14);
 
-  auto *topControls = new QHBoxLayout();
-  topControls->setSpacing(14);
+  topControlsLayout = new QHBoxLayout();
+  topControlsLayout->setSpacing(14);
 
   presetSelector = new PresetSelector(this);
   loadPresets();
@@ -123,11 +129,11 @@ void MainWindow::setupUi() {
 
   presetSelector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
   deviceSelector->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-  topControls->addWidget(presetSelector, 1);
-  topControls->addWidget(deviceSelector, 1);
+  topControlsLayout->addWidget(presetSelector, 1);
+  topControlsLayout->addWidget(deviceSelector, 1);
 
-  auto *preferencesRow = new QHBoxLayout();
-  preferencesRow->setSpacing(18);
+  preferencesLayout = new QHBoxLayout();
+  preferencesLayout->setSpacing(18);
   autoStartCheckBox = new QCheckBox("Start on login", this);
   autoStartCheckBox->setObjectName("preferenceCheckBox");
   autoStartCheckBox->setToolTip("Use a user-level systemd service.");
@@ -138,22 +144,21 @@ void MainWindow::setupUi() {
   minimizeToTrayCheckBox->setObjectName("preferenceCheckBox");
   minimizeToTrayCheckBox->setToolTip(
       "Closing the window keeps PulseForge running in the tray.");
-  preferencesRow->addWidget(autoStartCheckBox);
-  preferencesRow->addWidget(startMinimizedCheckBox);
-  preferencesRow->addWidget(minimizeToTrayCheckBox);
-  preferencesRow->addStretch();
+  preferencesLayout->addWidget(autoStartCheckBox);
+  preferencesLayout->addWidget(startMinimizedCheckBox);
+  preferencesLayout->addWidget(minimizeToTrayCheckBox);
+  preferencesLayout->addStretch();
 
   statusIndicator = new StatusIndicator(this);
   statusIndicator->setMessage("Ready. Enhancement is currently bypassed.");
 
   auto *soundSurface = new QWidget(this);
   soundSurface->setObjectName("soundSurface");
-  soundSurface->setMinimumWidth(kMinimumSoundSurfaceWidth);
   soundSurface->setSizePolicy(QSizePolicy::MinimumExpanding,
                               QSizePolicy::Expanding);
-  auto *soundSurfaceLayout = new QHBoxLayout(soundSurface);
-  soundSurfaceLayout->setContentsMargins(22, 22, 22, 22);
-  soundSurfaceLayout->setSpacing(22);
+  soundSurfaceLayout = new QHBoxLayout(soundSurface);
+  soundSurfaceLayout->setContentsMargins(18, 18, 18, 18);
+  soundSurfaceLayout->setSpacing(18);
 
   effectControls = new EffectControls(this);
   effectControls->setValues(PresetFactory::defaultEffectValues());
@@ -164,8 +169,8 @@ void MainWindow::setupUi() {
 
   enhancementToggle = new EnhancementToggle(this);
 
-  mainPanelLayout->addLayout(topControls);
-  mainPanelLayout->addLayout(preferencesRow);
+  mainPanelLayout->addLayout(topControlsLayout);
+  mainPanelLayout->addLayout(preferencesLayout);
   mainPanelLayout->addWidget(soundSurface, 1);
   mainPanelLayout->addWidget(enhancementToggle);
   mainPanelLayout->addWidget(statusIndicator);
@@ -186,6 +191,7 @@ void MainWindow::setupUi() {
   setWindowTitle(QString::fromUtf8(AppConfig::applicationName.data()));
   setMinimumSize(kMinimumWindowWidth, kMinimumWindowHeight);
   resize(1500, 840);
+  updateResponsiveLayout(width());
 }
 
 void MainWindow::setupTray() {
@@ -695,6 +701,71 @@ void MainWindow::closeEvent(QCloseEvent *event) {
 
   event->ignore();
   requestQuit();
+}
+
+void MainWindow::resizeEvent(QResizeEvent *event) {
+  QMainWindow::resizeEvent(event);
+  updateResponsiveLayout(width());
+}
+
+void MainWindow::updateResponsiveLayout(int width) {
+  const bool compact = width < kCompactLayoutWidth || height() < kCompactHeight;
+  const QBoxLayout::Direction direction =
+      compact ? QBoxLayout::TopToBottom : QBoxLayout::LeftToRight;
+
+  if (topControlsLayout && topControlsLayout->direction() != direction) {
+    topControlsLayout->setDirection(direction);
+  }
+  if (preferencesLayout && preferencesLayout->direction() != direction) {
+    preferencesLayout->setDirection(direction);
+  }
+  if (soundSurfaceLayout && soundSurfaceLayout->direction() != direction) {
+    soundSurfaceLayout->setDirection(direction);
+    soundSurfaceLayout->setContentsMargins(compact ? 12 : 18, compact ? 12 : 18,
+                                           compact ? 12 : 18, compact ? 12 : 18);
+    soundSurfaceLayout->setSpacing(compact ? 12 : 18);
+  }
+
+  if (effectControls) {
+    effectControls->setCompactMode(compact);
+  }
+  if (equalizerPanel) {
+    equalizerPanel->setCompactMode(compact);
+  }
+  if (enhancementToggle) {
+    enhancementToggle->setCompactMode(compact);
+  }
+}
+
+void MainWindow::mousePressEvent(QMouseEvent *event) {
+  if (event->button() == Qt::LeftButton &&
+      event->position().y() <= kDraggableHeaderHeight) {
+    draggingWindow = true;
+    windowDragOffset =
+        event->globalPosition().toPoint() - frameGeometry().topLeft();
+    event->accept();
+    return;
+  }
+
+  QMainWindow::mousePressEvent(event);
+}
+
+void MainWindow::mouseMoveEvent(QMouseEvent *event) {
+  if (draggingWindow && (event->buttons() & Qt::LeftButton)) {
+    move(event->globalPosition().toPoint() - windowDragOffset);
+    event->accept();
+    return;
+  }
+
+  QMainWindow::mouseMoveEvent(event);
+}
+
+void MainWindow::mouseReleaseEvent(QMouseEvent *event) {
+  if (event->button() == Qt::LeftButton) {
+    draggingWindow = false;
+  }
+
+  QMainWindow::mouseReleaseEvent(event);
 }
 
 void MainWindow::setAutoStartEnabledFromUi(bool enabled) {
