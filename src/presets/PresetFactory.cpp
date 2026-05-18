@@ -53,6 +53,28 @@ float normalizedEffectValue(const std::vector<int> &values,
          100.0f;
 }
 
+void makeGainsClipSafe(PresetGains &gains) {
+  float totalPositiveBoostDb = 0.0f;
+  for (float &gain : gains) {
+    gain = std::clamp(gain, DspConfig::minEffectiveEqGainDb,
+                      DspConfig::maxEffectiveEqGainDb);
+    totalPositiveBoostDb += std::max(0.0f, gain);
+  }
+
+  if (totalPositiveBoostDb <= DspConfig::maxTotalPositiveEqBoostDb ||
+      totalPositiveBoostDb <= DspConfig::tinySignal) {
+    return;
+  }
+
+  const float scale =
+      DspConfig::maxTotalPositiveEqBoostDb / totalPositiveBoostDb;
+  for (float &gain : gains) {
+    if (gain > 0.0f) {
+      gain *= scale;
+    }
+  }
+}
+
 EffectChain chainFor(const PresetGains &gains,
                      const PresetFrequencies &frequencies, float preampDb,
                      float limiterCeilingDb,
@@ -62,10 +84,12 @@ EffectChain chainFor(const PresetGains &gains,
   chain.effects.push_back(preamp(preampDb));
 
   for (std::size_t i = 0; i < frequencies.size(); ++i) {
+    const float q =
+        i < DspConfig::eqDefaultQ.size() ? DspConfig::eqDefaultQ.at(i) : 0.9f;
     chain.effects.push_back({"eq_band",
                              {{"freq", frequencies.at(i)},
                               {"gain", gains.at(i)},
-                              {"q", 1.0f}}});
+                              {"q", q}}});
   }
 
   if (compressorEffect) {
@@ -80,15 +104,18 @@ Preset makePreset(const std::string &id, const std::string &name,
                   const PresetGains &gains, float preampDb,
                   float limiterCeilingDb,
                   std::optional<Effect> compressorEffect = std::nullopt) {
+  PresetGains safeGains = gains;
+  makeGainsClipSafe(safeGains);
   return Preset{id, name, description,
-                chainFor(gains, builtInFrequencies(), preampDb,
+                chainFor(safeGains, builtInFrequencies(), preampDb,
                          limiterCeilingDb, std::move(compressorEffect))};
 }
 
 } // namespace
 
 std::vector<Preset> builtInPresets() {
-  return {flat(), gaming(), music(), movie(), voice(), bassBoost(), clarity()};
+  return {flat(),          gaming(), music(), movie(), voice(),
+          bassBoost(),     clarity(), competitiveFps(), warm(), bright()};
 }
 
 std::optional<Preset> presetById(const std::string &id) {
@@ -125,87 +152,123 @@ std::vector<float> defaultFrequencies() {
 }
 
 std::vector<int> defaultEffectValues() {
-  return {50, 24, 14, 34, 24, 50, 100};
+  return {42, 18, 10, 24, 18, 66, 100};
 }
 
 std::vector<int> effectValuesForPreset(const Preset &preset) {
   if (preset.id == "gaming") {
-    return {66, 18, 46, 42, 10, 50, 100};
+    return {54, 14, 34, 30, 8, 64, 100};
   }
   if (preset.id == "music") {
-    return {56, 34, 24, 54, 34, 50, 100};
+    return {46, 26, 16, 36, 24, 64, 100};
   }
   if (preset.id == "movie") {
-    return {48, 42, 42, 58, 44, 48, 100};
+    return {40, 34, 30, 40, 32, 60, 100};
   }
   if (preset.id == "voice") {
-    return {76, 6, 0, 36, 0, 50, 100};
+    return {60, 4, 0, 26, 0, 66, 100};
   }
   if (preset.id == "bass-boost") {
-    return {38, 20, 10, 48, 76, 46, 100};
+    return {30, 14, 8, 32, 54, 58, 100};
   }
   if (preset.id == "clarity") {
-    return {88, 10, 4, 42, 4, 50, 100};
+    return {70, 8, 2, 30, 2, 66, 100};
+  }
+  if (preset.id == "competitive-fps") {
+    return {68, 6, 8, 26, 0, 68, 100};
+  }
+  if (preset.id == "warm") {
+    return {28, 24, 10, 18, 34, 62, 100};
+  }
+  if (preset.id == "bright") {
+    return {76, 10, 4, 24, 0, 68, 100};
   }
   return defaultEffectValues();
 }
 
 Preset flat() {
   return makePreset("flat", "Flat", "Neutral response at unity loudness.",
-                    {0.4f, 0.2f, -0.7f, -0.3f, 0.2f,
-                     0.8f, 1.2f, 1.1f, 0.7f},
-                    0.0f, 0.0f);
+                    {0.2f, 0.1f, -0.4f, -0.2f, 0.1f,
+                     0.4f, 0.6f, 0.6f, 0.3f},
+                    -1.0f, -1.0f);
 }
 
 Preset gaming() {
   return makePreset("gaming", "Gaming",
                     "Tighter lows and clearer positional detail.",
-                    {-2.4f, -2.0f, -1.5f, 0.6f, 2.0f,
-                     3.6f, 3.2f, 1.8f, 0.6f},
-                    -0.2f, 0.0f,
-                    compressor(-10.0f, 1.25f, 8.0f, 140.0f));
+                    {-1.8f, -1.4f, -1.2f, 0.3f, 1.3f,
+                     2.4f, 2.2f, 1.2f, 0.4f},
+                    -1.5f, -1.0f,
+                    compressor(-12.0f, 1.2f, 10.0f, 170.0f));
 }
 
 Preset music() {
   return makePreset("music", "Music", "Gentle warmth with a little air.",
-                    {2.0f, 1.3f, -1.0f, -0.4f, 0.5f,
-                     1.6f, 2.4f, 2.3f, 1.4f},
-                    0.0f, 0.0f,
-                    compressor(-9.0f, 1.15f, 18.0f, 180.0f));
+                    {1.1f, 0.7f, -0.8f, -0.3f, 0.3f,
+                     0.9f, 1.3f, 1.2f, 0.7f},
+                    -1.2f, -1.0f,
+                    compressor(-11.0f, 1.12f, 18.0f, 220.0f));
 }
 
 Preset movie() {
   return makePreset("movie", "Movie", "Fuller low end with clearer dialog.",
-                    {3.2f, 2.1f, -1.2f, 0.1f, 1.6f,
-                     2.6f, 1.9f, 1.1f, 0.5f},
-                    -0.5f, 0.0f,
-                    compressor(-12.0f, 1.35f, 12.0f, 220.0f));
+                    {1.8f, 1.2f, -0.9f, 0.0f, 1.0f,
+                     1.7f, 1.2f, 0.7f, 0.3f},
+                    -1.8f, -1.0f,
+                    compressor(-13.0f, 1.25f, 14.0f, 240.0f));
 }
 
 Preset voice() {
   return makePreset("voice", "Voice", "Focused speech and reduced rumble.",
-                    {-6.0f, -4.2f, -2.4f, 0.8f, 2.6f,
-                     3.8f, 1.8f, -1.4f, -2.2f},
-                    0.0f, 0.0f,
-                    compressor(-14.0f, 1.6f, 6.0f, 150.0f));
+                    {-4.0f, -3.0f, -1.8f, 0.5f, 1.7f,
+                     2.4f, 1.0f, -1.2f, -1.8f},
+                    -1.2f, -1.0f,
+                    compressor(-15.0f, 1.45f, 8.0f, 180.0f));
 }
 
 Preset bassBoost() {
   return makePreset("bass-boost", "Bass Boost",
                     "More low-end weight without crushing volume.",
-                    {5.2f, 3.8f, 0.4f, -0.8f, -0.8f,
-                     0.2f, 1.2f, 0.9f, 0.4f},
-                    -0.5f, 0.0f,
-                    compressor(-11.0f, 1.3f, 14.0f, 200.0f));
+                    {3.2f, 2.3f, 0.0f, -0.8f, -0.6f,
+                     0.0f, 0.7f, 0.5f, 0.2f},
+                    -2.0f, -1.0f,
+                    compressor(-12.0f, 1.3f, 16.0f, 240.0f));
 }
 
 Preset clarity() {
   return makePreset("clarity", "Clarity",
                     "Cleaner presence with restrained brightness.",
-                    {-2.6f, -2.0f, -1.4f, 0.4f, 1.8f,
-                     3.6f, 4.0f, 2.5f, 1.2f},
-                    0.0f, 0.0f,
-                    compressor(-10.0f, 1.2f, 8.0f, 150.0f));
+                    {-1.8f, -1.4f, -1.1f, 0.2f, 1.2f,
+                     2.4f, 2.6f, 1.6f, 0.7f},
+                    -1.5f, -1.0f,
+                    compressor(-12.0f, 1.18f, 10.0f, 180.0f));
+}
+
+Preset competitiveFps() {
+  return makePreset("competitive-fps", "Competitive FPS",
+                    "Maximum footstep focus with restrained bass.",
+                    {-3.2f, -2.6f, -1.8f, 0.2f, 1.6f,
+                     2.6f, 2.0f, 0.6f, -0.2f},
+                    -1.4f, -1.0f,
+                    compressor(-13.0f, 1.18f, 8.0f, 150.0f));
+}
+
+Preset warm() {
+  return makePreset("warm", "Warm",
+                    "Smooth relaxed listening with fuller lows.",
+                    {1.4f, 1.0f, -0.7f, -0.8f, -0.3f,
+                     0.2f, 0.3f, 0.2f, 0.0f},
+                    -1.4f, -1.0f,
+                    compressor(-12.0f, 1.12f, 20.0f, 260.0f));
+}
+
+Preset bright() {
+  return makePreset("bright", "Bright",
+                    "Air and detail without sharp upper mids.",
+                    {-1.0f, -0.9f, -1.2f, -0.3f, 0.6f,
+                     1.2f, 2.1f, 2.2f, 1.0f},
+                    -1.6f, -1.0f,
+                    compressor(-12.0f, 1.12f, 12.0f, 200.0f));
 }
 
 Preset equalizer(const std::vector<float> &gains) {
@@ -231,6 +294,7 @@ Preset equalizer(const std::vector<float> &gains,
   for (std::size_t i = 0; i < safeGains.size() && i < gains.size(); ++i) {
     safeGains.at(i) = gains.at(i);
   }
+  makeGainsClipSafe(safeGains);
 
   PresetFrequencies safeFrequencies = builtInFrequencies();
   for (std::size_t i = 0; i < safeFrequencies.size() && i < frequencies.size();
@@ -249,23 +313,23 @@ Preset equalizer(const std::vector<float> &gains,
   const float surround = normalizedEffectValue(effectValues, 2);
   const float bass = normalizedEffectValue(effectValues, 4);
   const float totalPreampDb =
-      std::clamp(1.0f + dynamicBoost * 2.4f + fidelity * 0.8f +
-                     bass * 0.45f + preampDb,
-                 -12.0f, 12.0f);
+      std::clamp(-1.5f + dynamicBoost * 1.6f + fidelity * 0.25f +
+                     bass * 0.2f + preampDb,
+                 -12.0f, 6.0f);
   const float safeLimiterCeilingDb =
       std::clamp(limiterCeilingDb, DspConfig::minLimiterCeilingDb,
-                 DspConfig::maxLimiterCeilingDb);
+                 -1.0f);
   std::optional<Effect> compressorEffect = std::nullopt;
   if (dynamicBoost > 0.05f) {
     compressorEffect =
-        compressor(-12.0f - dynamicBoost * 14.0f,
-                   1.25f + dynamicBoost * 1.65f, 3.0f, 95.0f);
+        compressor(-8.0f - dynamicBoost * 3.0f,
+                   1.08f + dynamicBoost * 0.32f, 18.0f, 260.0f);
   }
 
   EffectChain chain =
       chainFor(safeGains, safeFrequencies, totalPreampDb,
                safeLimiterCeilingDb, compressorEffect);
-  const float width = 1.0f + surround * 1.15f + ambience * 0.45f;
+  const float width = 1.0f + surround * 0.65f + ambience * 0.22f;
   chain.effects.push_back(stereoWidth(width));
 
   return Preset{"custom-eq", "Custom EQ", "User controlled equalizer curve.",

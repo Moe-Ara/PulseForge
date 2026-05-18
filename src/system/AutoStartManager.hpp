@@ -7,5 +7,6 @@ public:
   bool isAutoStartEnabled() const;
 
 private:
+  bool ensureUserServiceFile() const;
   bool runSystemctlUser(const char *action) const;
 };

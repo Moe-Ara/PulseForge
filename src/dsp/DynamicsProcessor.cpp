@@ -22,7 +22,23 @@ float timeCoefficient(float milliseconds, float sampleRate) {
 }
 
 float sanitizeSample(float sample) {
-  return std::isfinite(sample) ? sample : 0.0f;
+  if (!std::isfinite(sample) || std::abs(sample) < DspConfig::denormalFloor) {
+    return 0.0f;
+  }
+  return sample;
+}
+
+float softLimit(float sample, float ceiling) {
+  sample = sanitizeSample(sample);
+  const float sign = sample < 0.0f ? -1.0f : 1.0f;
+  const float magnitude = std::abs(sample);
+  if (magnitude <= ceiling) {
+    return sample;
+  }
+
+  const float excess = magnitude - ceiling;
+  const float shaped = ceiling + excess / (1.0f + excess * 4.0f);
+  return sign * std::min(shaped, 0.999f);
 }
 
 } // namespace
@@ -66,6 +82,9 @@ void DynamicsProcessor::process(float *left, float *right, uint32_t frames,
   const float currentCeiling =
       ceilingLinear.load(std::memory_order_relaxed);
   const float currentThresholdLinear = dbToLinear(currentThresholdDb);
+  float blockPeak = 0.0f;
+  uint64_t blockLimiterActivations = 0;
+  uint64_t blockClippedSamples = 0;
 
   const float attack =
       timeCoefficient(attackMs.load(std::memory_order_relaxed), sampleRate);
@@ -97,11 +116,34 @@ void DynamicsProcessor::process(float *left, float *right, uint32_t frames,
     if (useLimiter) {
       const float outputPeak =
           std::max(std::abs(leftSample), std::abs(rightSample));
-      if (outputPeak > currentCeiling && outputPeak > DspConfig::tinySignal) {
-        const float gain = currentCeiling / outputPeak;
-        leftSample *= gain;
-        rightSample *= gain;
+      const float targetGain =
+          outputPeak > currentCeiling && outputPeak > DspConfig::tinySignal
+              ? currentCeiling / outputPeak
+              : 1.0f;
+
+      if (targetGain < limiterGain) {
+        limiterGain = targetGain;
+        ++blockLimiterActivations;
+      } else {
+        const float limiterRelease =
+            timeCoefficient(DspConfig::limiterReleaseMs, sampleRate);
+        limiterGain =
+            limiterRelease * limiterGain + (1.0f - limiterRelease);
       }
+
+      leftSample *= limiterGain;
+      rightSample *= limiterGain;
+    }
+
+    leftSample = softLimit(leftSample, currentCeiling);
+    rightSample = softLimit(rightSample, currentCeiling);
+    blockPeak = std::max(
+        blockPeak, std::max(std::abs(leftSample), std::abs(rightSample)));
+    if (std::abs(leftSample) >= 0.999f) {
+      ++blockClippedSamples;
+    }
+    if (std::abs(rightSample) >= 0.999f) {
+      ++blockClippedSamples;
     }
 
     left[frame] = std::clamp(sanitizeSample(leftSample), DspConfig::outputMin,
@@ -109,10 +151,27 @@ void DynamicsProcessor::process(float *left, float *right, uint32_t frames,
     right[frame] = std::clamp(sanitizeSample(rightSample),
                               DspConfig::outputMin, DspConfig::outputMax);
   }
+
+  recentPeak.store(blockPeak, std::memory_order_relaxed);
+  if (blockLimiterActivations > 0) {
+    limiterActivations.fetch_add(blockLimiterActivations,
+                                 std::memory_order_relaxed);
+  }
+  if (blockClippedSamples > 0) {
+    clippedSamples.fetch_add(blockClippedSamples, std::memory_order_relaxed);
+  }
 }
 
 void DynamicsProcessor::reset() {
   envelope = 0.0f;
+  limiterGain = 1.0f;
+  resetMetering();
+}
+
+void DynamicsProcessor::resetMetering() {
+  recentPeak.store(0.0f, std::memory_order_relaxed);
+  limiterActivations.store(0, std::memory_order_relaxed);
+  clippedSamples.store(0, std::memory_order_relaxed);
 }
 
 bool DynamicsProcessor::compressorActive() const {
@@ -125,4 +184,16 @@ bool DynamicsProcessor::limiterActive() const {
 
 float DynamicsProcessor::limiterCeilingLinear() const {
   return ceilingLinear.load(std::memory_order_acquire);
+}
+
+float DynamicsProcessor::recentPeakLinear() const {
+  return recentPeak.load(std::memory_order_acquire);
+}
+
+uint64_t DynamicsProcessor::limiterActivationCount() const {
+  return limiterActivations.load(std::memory_order_acquire);
+}
+
+uint64_t DynamicsProcessor::clippedSampleCount() const {
+  return clippedSamples.load(std::memory_order_acquire);
 }

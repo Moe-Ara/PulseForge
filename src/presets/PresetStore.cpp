@@ -37,7 +37,7 @@ QVariantList floatsToVariantList(const std::vector<float> &floats) {
 }
 
 std::vector<int> defaultEffectValues() {
-  return {50, 24, 14, 34, 24, 50, 100};
+  return {42, 18, 10, 24, 18, 66, 100};
 }
 
 std::vector<int> intsFromVariantList(const QVariantList &values) {

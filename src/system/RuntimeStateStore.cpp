@@ -42,8 +42,12 @@ bool RuntimeStateStore::load(RuntimeState &state) const {
         loaded.loopbackModuleId = std::stoi(line.substr(16));
       } else if (line.rfind("previous_default=", 0) == 0) {
         loaded.previousDefaultSinkName = line.substr(17);
+      } else if (line.rfind("previous_default_source=", 0) == 0) {
+        loaded.previousDefaultSourceName = line.substr(24);
       } else if (line.rfind("processing_sink=", 0) == 0) {
         loaded.processingSinkName = line.substr(16);
+      } else if (line.rfind("source_changed=", 0) == 0) {
+        loaded.defaultSourceChangedByPulseForge = line.substr(15) == "1";
       }
     } catch (...) {
     }
@@ -72,7 +76,11 @@ bool RuntimeStateStore::save(const RuntimeState &state) const {
   stream << "virtual_sink_module=" << state.virtualSinkModuleId << '\n';
   stream << "loopback_module=" << state.loopbackModuleId << '\n';
   stream << "previous_default=" << state.previousDefaultSinkName << '\n';
+  stream << "previous_default_source=" << state.previousDefaultSourceName
+         << '\n';
   stream << "processing_sink=" << state.processingSinkName << '\n';
+  stream << "source_changed="
+         << (state.defaultSourceChangedByPulseForge ? "1" : "0") << '\n';
   return true;
 }
 

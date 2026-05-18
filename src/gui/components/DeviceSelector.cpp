@@ -2,6 +2,7 @@
 
 #include <QComboBox>
 #include <QLabel>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 
 DeviceSelector::DeviceSelector(QWidget *parent) : QWidget(parent) {
@@ -16,6 +17,10 @@ DeviceSelector::DeviceSelector(QWidget *parent) : QWidget(parent) {
 
   deviceComboBox = new QComboBox(this);
   deviceComboBox->setObjectName("fieldCombo");
+  deviceComboBox->setMinimumContentsLength(22);
+  deviceComboBox->setSizeAdjustPolicy(
+      QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  deviceComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
   emptyLabel = new QLabel("No PipeWire output devices found", this);
   emptyLabel->setObjectName("hintLabel");
@@ -32,11 +37,14 @@ void DeviceSelector::setDevices(const std::vector<AudioDevice> &devices) {
   for (const auto &device : devices) {
     deviceComboBox->addItem(QString::fromStdString(device.name),
                             QString::fromStdString(device.id));
-    deviceComboBox->setItemData(deviceComboBox->count() - 1,
+    const int itemIndex = deviceComboBox->count() - 1;
+    deviceComboBox->setItemData(itemIndex,
                                 QString::fromStdString(device.sinkName),
                                 Qt::UserRole + 1);
+    deviceComboBox->setItemData(itemIndex, QString::fromStdString(device.name),
+                                Qt::ToolTipRole);
     if (device.isDefault) {
-      deviceComboBox->setCurrentIndex(deviceComboBox->count() - 1);
+      deviceComboBox->setCurrentIndex(itemIndex);
     }
   }
 

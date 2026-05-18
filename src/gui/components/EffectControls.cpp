@@ -1,6 +1,7 @@
 #include "EffectControls.hpp"
 
 #include <QLabel>
+#include <QSizePolicy>
 #include <QSlider>
 #include <QVBoxLayout>
 #include <algorithm>
@@ -28,6 +29,9 @@ float sliderRangeValue(const QSlider *slider, float minimum, float maximum) {
 
 EffectControls::EffectControls(QWidget *parent) : QWidget(parent) {
   setObjectName("effectsPanel");
+  setMinimumWidth(240);
+  setMaximumWidth(300);
+  setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Expanding);
 
   auto *layout = new QVBoxLayout(this);
   layout->setContentsMargins(24, 20, 24, 20);
@@ -75,15 +79,15 @@ std::vector<float> EffectControls::tonalGains() const {
   const float bass = normalizedValue(sliders.at(4));
 
   return {
-      bass * 11.0f - fidelity * 0.8f,
-      bass * 8.0f - fidelity * 0.5f,
-      bass * 2.6f - surround * 2.4f - ambience * 1.2f,
-      ambience * 3.2f - surround * 1.6f,
-      ambience * 3.8f + dynamicBoost * 2.6f,
-      fidelity * 5.4f + dynamicBoost * 3.0f,
-      fidelity * 7.2f + surround * 4.0f,
-      fidelity * 6.2f + surround * 5.2f,
-      fidelity * 4.2f + surround * 3.8f,
+      bass * 6.5f - fidelity * 0.4f,
+      bass * 4.5f - fidelity * 0.3f,
+      bass * 1.4f - surround * 1.2f - ambience * 0.8f,
+      ambience * 1.8f - surround * 0.8f,
+      ambience * 2.2f + dynamicBoost * 0.8f,
+      fidelity * 3.0f + dynamicBoost * 1.1f,
+      fidelity * 4.0f + surround * 2.2f + dynamicBoost * 1.0f,
+      fidelity * 3.4f + surround * 2.8f,
+      fidelity * 2.2f + surround * 2.0f,
   };
 }
 
@@ -91,14 +95,14 @@ float EffectControls::preampDb() const {
   if (sliders.size() <= kPreampIndex) {
     return 0.0f;
   }
-  return sliderRangeValue(sliders.at(kPreampIndex), -6.0f, 6.0f);
+  return sliderRangeValue(sliders.at(kPreampIndex), -8.0f, 4.0f);
 }
 
 float EffectControls::limiterCeilingDb() const {
   if (sliders.size() <= kLimiterIndex) {
     return 0.0f;
   }
-  return sliderRangeValue(sliders.at(kLimiterIndex), -12.0f, 0.0f);
+  return sliderRangeValue(sliders.at(kLimiterIndex), -12.0f, -1.0f);
 }
 
 void EffectControls::setValuesChangedHandler(std::function<void()> handler) {
@@ -108,6 +112,8 @@ void EffectControls::setValuesChangedHandler(std::function<void()> handler) {
 void EffectControls::addControl(const QString &name, int value) {
   auto *label = new QLabel(name, this);
   label->setObjectName("effectLabel");
+  label->setWordWrap(false);
+  label->setMinimumHeight(20);
   controlNames.push_back(name);
   labels.push_back(label);
 
@@ -116,6 +122,7 @@ void EffectControls::addControl(const QString &name, int value) {
   slider->setRange(kSliderMinimum, kSliderMaximum);
   slider->setValue(value);
   slider->setFixedHeight(20);
+  slider->setMinimumWidth(180);
   sliders.push_back(slider);
   updateControlLabel(sliders.size() - 1);
 

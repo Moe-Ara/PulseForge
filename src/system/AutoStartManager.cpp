@@ -3,8 +3,13 @@
 #include "../core/AppConfig.hpp"
 #include "../core/Logger.hpp"
 
+#include <QCoreApplication>
+#include <QDir>
+#include <QFile>
+#include <QIODevice>
 #include <QProcess>
 #include <QStringList>
+#include <QTextStream>
 
 #include <string>
 
@@ -40,9 +45,19 @@ ProcessResult runSystemctl(const QStringList &arguments) {
   return result;
 }
 
+QString quoteSystemdExecPath(QString path) {
+  path.replace("\\", "\\\\");
+  path.replace("\"", "\\\"");
+  return "\"" + path + "\"";
+}
+
 } // namespace
 
 bool AutoStartManager::enableAutoStart() const {
+  if (!ensureUserServiceFile()) {
+    return false;
+  }
+
   const ProcessResult reloadResult = runSystemctl({"--user", "daemon-reload"});
   if (reloadResult.exitCode != 0) {
     Logger::warn("systemctl --user daemon-reload failed before enabling "
@@ -63,6 +78,48 @@ bool AutoStartManager::isAutoStartEnabled() const {
       runSystemctl({"--user", "is-enabled",
                     QString::fromUtf8(AppConfig::systemdServiceName.data())});
   return result.exitCode == 0 && result.output == "enabled";
+}
+
+bool AutoStartManager::ensureUserServiceFile() const {
+  const QString serviceDirectory =
+      QDir::homePath() + QStringLiteral("/.config/systemd/user");
+  QDir directory(serviceDirectory);
+  if (!directory.exists() && !directory.mkpath(QStringLiteral("."))) {
+    Logger::warn("Could not create user systemd directory: " +
+                 serviceDirectory.toStdString());
+    return false;
+  }
+
+  const QString servicePath =
+      serviceDirectory + QStringLiteral("/") +
+      QString::fromUtf8(AppConfig::systemdServiceName.data());
+  QFile serviceFile(servicePath);
+  if (!serviceFile.open(QIODevice::WriteOnly | QIODevice::Text |
+                        QIODevice::Truncate)) {
+    Logger::warn("Could not write PulseForge user service: " +
+                 serviceFile.errorString().toStdString());
+    return false;
+  }
+
+  const QString executable =
+      quoteSystemdExecPath(QCoreApplication::applicationFilePath());
+  QTextStream stream(&serviceFile);
+  stream << "[Unit]\n"
+         << "Description=PulseForge Audio Enhancer\n"
+         << "After=graphical-session.target pipewire.service "
+            "pipewire-pulse.service wireplumber.service\n"
+         << "Wants=pipewire.service pipewire-pulse.service "
+            "wireplumber.service\n\n"
+         << "[Service]\n"
+         << "Type=simple\n"
+         << "ExecStart=" << executable << " --start-minimized\n"
+         << "Restart=on-failure\n"
+         << "RestartSec=2\n\n"
+         << "[Install]\n"
+         << "WantedBy=default.target\n";
+
+  Logger::info("Wrote PulseForge user service: " + servicePath.toStdString());
+  return true;
 }
 
 bool AutoStartManager::runSystemctlUser(const char *action) const {

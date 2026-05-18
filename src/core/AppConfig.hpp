@@ -7,6 +7,8 @@ namespace AppConfig {
 
 inline constexpr std::string_view organizationName = "PulseForge";
 inline constexpr std::string_view applicationName = "PulseForge";
+inline constexpr std::string_view applicationVersion = "0.1.0-alpha";
+inline constexpr std::string_view applicationId = "io.github.MoeAra.PulseForge";
 inline constexpr std::string_view desktopFileName = "pulseforge";
 inline constexpr std::string_view executableName = "pulseforge";
 inline constexpr std::string_view systemdServiceName = "pulseforge.service";

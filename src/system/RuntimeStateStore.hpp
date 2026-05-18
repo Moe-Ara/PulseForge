@@ -6,7 +6,9 @@ struct RuntimeState {
   int virtualSinkModuleId = -1;
   int loopbackModuleId = -1;
   std::string previousDefaultSinkName;
+  std::string previousDefaultSourceName;
   std::string processingSinkName;
+  bool defaultSourceChangedByPulseForge = false;
 };
 
 class RuntimeStateStore {

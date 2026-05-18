@@ -93,6 +93,31 @@ bool PipeWireRouting::setDefaultSink(const std::string &sinkName) const {
   return true;
 }
 
+bool PipeWireRouting::getDefaultSource(std::string &sourceName) const {
+  const ProcessResult result =
+      processRunner.run({std::string(AudioConfig::pactlExecutable),
+                         "get-default-source"});
+  sourceName = ProcessRunner::trim(result.output);
+  if (result.exitCode != 0 || sourceName.empty()) {
+    Logger::warn("Failed to get current default source. Output: " +
+                 sourceName);
+    return false;
+  }
+
+  return true;
+}
+
+bool PipeWireRouting::setDefaultSource(const std::string &sourceName) const {
+  if (!processRunner.runChecked({std::string(AudioConfig::pactlExecutable),
+                                 "set-default-source", sourceName},
+                                "Failed to set default source.")) {
+    return false;
+  }
+
+  Logger::info("Set default source: " + sourceName);
+  return true;
+}
+
 bool PipeWireRouting::listModules(std::string &modules) const {
   const ProcessResult result =
       processRunner.run({std::string(AudioConfig::pactlExecutable), "list",

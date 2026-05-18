@@ -1,18 +1,43 @@
 # PulseForge
 
-PulseForge is a source-available, non-commercial Qt Widgets PipeWire audio
-enhancement app for Linux. It creates a PulseForge virtual sink, captures that
-monitor stream, processes audio in its own C++ DSP engine, and plays the result
-to the selected real PipeWire output.
+PulseForge is a source-available, non-commercial Linux desktop audio enhancer
+for PipeWire. It creates a virtual audio sink, captures that monitor stream,
+processes the audio in PulseForge's own C++ DSP engine, and plays the result
+through your selected real output device.
+
+Current release target: `v0.1.0-alpha`
+
+## Alpha Status
+
+PulseForge is early alpha software. The core routing and DSP path are intended
+to be usable, but you should expect rough edges across different PipeWire,
+WirePlumber, device, and desktop-session setups.
+
+Before reporting audio bugs, test that disable/quit restores your previous
+default output device and that no stale `pulseforge_enhanced` sink remains.
+
+## Features
+
+- Qt 6 Widgets desktop UI with dark theme and tray support.
+- PipeWire output device selection.
+- PulseForge virtual sink with C++ DSP processing.
+- Live EQ, presets, preamp, limiter, compressor, and stereo enhancement controls.
+- Mic isolation guard so the PulseForge monitor does not become the default mic.
+- Persistent settings for device, preset, EQ, enhancement state, and startup behavior.
+- User-level systemd start-on-login integration.
+- AppImage-oriented packaging structure.
+
+PulseForge does not use PipeWire filter-chain, LADSPA, LV2, EasyEffects, or
+external DSP plugins.
 
 ## License
 
 PulseForge is licensed under the
 [PolyForm Noncommercial License 1.0.0](LICENSE).
 
-This means you can read, share, modify, and redistribute the code for permitted
-non-commercial purposes, but commercial packaging, resale, paid redistribution,
-or other commercial use is not allowed without separate permission from the
+You can read, share, modify, and redistribute the code for permitted
+non-commercial purposes. Commercial packaging, resale, paid redistribution, or
+other commercial use is not allowed without separate permission from the
 copyright holder.
 
 Redistributions must keep the license and required notices, including
@@ -25,31 +50,133 @@ https://github.com/Moe-Ara/PulseForge
 Because the license restricts commercial use, PulseForge is source-available but
 not OSI-open-source software.
 
-## Runtime Dependencies
+## Runtime Requirements
 
+Required at runtime:
+
+- PipeWire
+- WirePlumber
+- PipeWire Pulse compatibility server
+- `pactl`
 - Qt 6 Widgets runtime
-- PipeWire, PipeWire Pulse, and WirePlumber
-- PulseAudio-compatible PipeWire tools (`pactl`)
-- `systemd --user` for optional start-on-login support
 
-On Fedora/Bazzite, the runtime packages are typically:
+Optional:
+
+- `systemd --user` for Start on login
+
+On Fedora/Bazzite, these are usually present. If needed:
 
 ```bash
-sudo dnf install qt6-qtbase pipewire pipewire-pulseaudio wireplumber
+sudo dnf install qt6-qtbase pipewire pipewire-pulseaudio wireplumber pulseaudio-utils
 ```
 
-Build dependencies:
+PulseForge checks these requirements on startup and shows a friendly error if
+the audio session is not ready.
+
+## Install AppImage
+
+Download the AppImage from the GitHub release page, then:
+
+```bash
+chmod +x PulseForge-v0.1.0-alpha-x86_64.AppImage
+./PulseForge-v0.1.0-alpha-x86_64.AppImage
+```
+
+The AppImage bundles PulseForge and Qt libraries. It does not bundle PipeWire,
+WirePlumber, `pipewire-pulse`, or system audio services.
+
+## Build AppImage
+
+Install build tools, Qt development headers, PipeWire development headers,
+`linuxdeploy`, and `linuxdeploy-plugin-qt`, then run:
+
+```bash
+scripts/package-appimage.sh
+```
+
+The script builds:
+
+- `PulseForge-v0.1.0-alpha-x86_64.AppImage`
+- `PulseForge-v0.1.0-alpha-x86_64.AppImage.sha256`
+
+## Build From Source
+
+Fedora/Bazzite build dependencies:
 
 ```bash
 sudo dnf install cmake gcc-c++ qt6-qtbase-devel pipewire-devel pkgconf-pkg-config
 ```
 
-PulseForge does not use PipeWire filter-chain, LADSPA, LV2, EasyEffects, or
-external DSP plugins.
+Build:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build --parallel
+./build/pulseforge
+```
+
+User-local install:
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX="$HOME/.local"
+cmake --build build --parallel
+cmake --install build
+```
+
+System/package install layout:
+
+```text
+/usr/bin/pulseforge
+/usr/share/applications/io.github.MoeAra.PulseForge.desktop
+/usr/share/icons/hicolor/256x256/apps/pulseforge.png
+/usr/share/icons/hicolor/scalable/apps/pulseforge.svg
+/usr/share/metainfo/io.github.MoeAra.PulseForge.metainfo.xml
+/usr/share/pulseforge/styleDark.qss
+/usr/share/systemd/user/pulseforge.service
+```
+
+Validate packaging metadata when the tools are installed:
+
+```bash
+desktop-file-validate data/io.github.MoeAra.PulseForge.desktop
+appstreamcli validate --no-net data/metainfo/io.github.MoeAra.PulseForge.metainfo.xml
+```
+
+## Start On Login
+
+Use the `Start on login` checkbox in the PulseForge UI.
+
+Internally, PulseForge uses a user-level systemd service and does not require
+`sudo`:
+
+```bash
+systemctl --user enable pulseforge.service
+systemctl --user disable pulseforge.service
+systemctl --user is-enabled pulseforge.service
+```
+
+For AppImage use, PulseForge writes a user service that points at the currently
+running AppImage path and launches with `--start-minimized`.
+
+## Usage
+
+1. Launch PulseForge from the app menu, AppImage, or terminal.
+2. Select the real output device you want to hear.
+3. Pick a preset or adjust EQ/effect controls.
+4. Press the large power button to enable enhancement.
+5. Close the window to keep PulseForge in the tray, or use Quit to fully exit.
+
+Command-line startup options:
+
+```bash
+pulseforge --start-minimized
+pulseforge --background
+pulseforge --minimized
+```
 
 ## Architecture
 
-The current routing path is:
+Current routing:
 
 ```text
 Apps
@@ -59,159 +186,110 @@ Apps
 -> selected real output sink
 ```
 
-The code is organized around focused modules:
+Code layout:
 
-- `src/audio/`: backend lifecycle, PipeWire device discovery, and routing.
+- `src/audio/`: PipeWire backend lifecycle, device discovery, and routing.
 - `src/dsp/`: real-time audio processor, SPSC frame buffer, EQ, limiter, and compressor.
-- `src/system/`: process execution, runtime state, and autostart integration.
-- `src/core/`: application-wide configuration and logging.
-- `src/gui/`: Qt Widgets UI and reusable components.
+- `src/system/`: process execution, settings, runtime state, dependency checks, and autostart.
+- `src/core/`: app constants and logging.
+- `src/gui/`: Qt Widgets UI, tray manager, and reusable components.
+- `data/`: desktop file, icon, AppStream metadata, and systemd service template.
+- `scripts/`: release/build helper scripts.
 
-For deeper implementation notes, real-time audio rules, and contribution
-workflow, see [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md).
+Developer notes are in [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). DSP notes
+are in [docs/DSP_AUDIT.md](docs/DSP_AUDIT.md).
 
-## Install
+## Troubleshooting
 
-For a user-local install on Fedora/Bazzite:
+### PulseForge Says Runtime Requirements Are Missing
 
-```bash
-cmake -S . -B build -DCMAKE_INSTALL_PREFIX="$HOME/.local"
-cmake --build build
-cmake --install build
-```
-
-This installs:
-
-- `~/.local/bin/pulseforge`
-- `~/.local/share/applications/pulseforge.desktop`
-- `~/.local/share/icons/hicolor/scalable/apps/pulseforge.svg`
-- `~/.local/share/metainfo/io.github.Moe_Ara.PulseForge.metainfo.xml`
-- `~/.local/share/pulseforge/styleDark.qss`
-- `~/.local/share/systemd/user/pulseforge.service`
-
-Refresh desktop/app metadata after a user-local install:
+Make sure PipeWire, WirePlumber, PipeWire Pulse, and `pactl` are installed and
+running:
 
 ```bash
-update-desktop-database "$HOME/.local/share/applications" 2>/dev/null || true
-gtk-update-icon-cache "$HOME/.local/share/icons/hicolor" 2>/dev/null || true
+systemctl --user status pipewire.service pipewire-pulse.service wireplumber.service
+pactl info
 ```
 
-For distro packaging, use the normal prefix:
+On Fedora/Bazzite:
 
 ```bash
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
-cmake --build build
-DESTDIR="$PWD/package-root" cmake --install build
+sudo dnf install pipewire pipewire-pulseaudio wireplumber pulseaudio-utils
 ```
 
-The CMake install rules place files under standard Fedora paths:
+Then log out and back in.
 
-- `/usr/bin/pulseforge`
-- `/usr/share/applications/pulseforge.desktop`
-- `/usr/share/icons/hicolor/scalable/apps/pulseforge.svg`
-- `/usr/share/metainfo/io.github.Moe_Ara.PulseForge.metainfo.xml`
-- `/usr/share/pulseforge/styleDark.qss`
-- `/usr/share/systemd/user/pulseforge.service`
+### No Audio After Enabling
 
-Suggested RPM runtime requirements:
+Use the tray menu or the main button to disable enhancement. PulseForge should
+restore your previous default sink. If not, manually select your real output in
+your desktop sound settings and restart PulseForge.
+
+### Chat Apps Hear PulseForge Output
+
+Do not select `pulseforge_enhanced.monitor` as your microphone in Discord or
+other chat apps. Select your real microphone. PulseForge also guards against
+that monitor becoming the system default source.
+
+### Stale Virtual Sink After Crash
+
+PulseForge stores crash-cleanup state in:
 
 ```text
-qt6-qtbase
-pipewire
-pipewire-pulseaudio
-wireplumber
-systemd
+$XDG_RUNTIME_DIR/pulseforge/runtime-state
 ```
 
-Suggested RPM build requirements:
+On next launch it tries to unload stale modules and restore defaults.
 
-```text
-cmake
-gcc-c++
-qt6-qtbase-devel
-pipewire-devel
-pkgconfig
-```
+## Release Process
 
-Packagers should run these validation tools when available:
+See [RELEASE_CHECKLIST.md](RELEASE_CHECKLIST.md).
+
+Release assets for GitHub:
+
+- AppImage
+- SHA256 checksum
+- Source tarball
+- Screenshots
+- Release notes
+
+Generate a checksum manually:
 
 ```bash
-desktop-file-validate data/pulseforge.desktop
-appstreamcli validate --no-net data/metainfo/io.github.Moe_Ara.PulseForge.metainfo.xml
+sha256sum PulseForge-v0.1.0-alpha-x86_64.AppImage > PulseForge-v0.1.0-alpha-x86_64.AppImage.sha256
 ```
-
-## Start On Login
-
-PulseForge uses `systemd --user`; no `sudo` is required.
-
-```bash
-systemctl --user daemon-reload
-systemctl --user enable --now pulseforge.service
-```
-
-To disable automatic startup:
-
-```bash
-systemctl --user disable pulseforge.service
-```
-
-The service launches `pulseforge --background`, which currently starts the app minimized and is ready for future tray/background mode.
-
-## Usage
-
-1. Launch PulseForge from the desktop menu or run `pulseforge`.
-2. Select the real output device you want to hear.
-3. Pick a preset or adjust the equalizer.
-4. Press the main enhancement button.
-
-PulseForge stores settings with Qt settings and keeps crash-cleanup state in
-`$XDG_RUNTIME_DIR/pulseforge/runtime-state`.
-
-## For Developers
-
-PulseForge is built around a small number of important boundaries:
-
-- `AudioService` is the app-facing orchestration layer.
-- `PipeWireBackend` owns PipeWire lifecycle, virtual sink routing, and cleanup.
-- `AudioProcessor` owns real-time stream capture/playback and DSP processing.
-- `PresetFactory` maps presets and GUI controls into an `EffectChain`.
-- GUI components publish user intent; they should not duplicate DSP logic.
-
-Important development rules:
-
-- Keep audio callbacks allocation-free, lock-free, and log-free.
-- Implement DSP inside PulseForge rather than through external plugin chains.
-- Preserve enable/disable cleanup and previous-default-sink restoration.
-- Use reusable Qt Widgets components and object-name based QSS.
-- Add new constants to `AppConfig`, `AudioConfig`, or `DspConfig` where possible.
-
-See [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) before working on the audio
-backend, DSP engine, preset system, or GUI architecture.
 
 ## Contributing
 
-Contributions are welcome. Good first areas include:
+Contributions are welcome, especially:
 
-- Testing PulseForge on different PipeWire/WirePlumber desktop sessions.
-- Improving presets for common headphones, speakers, and handheld devices.
-- Polishing Qt Widgets layout and accessibility.
-- Adding focused DSP improvements with real-time-safe implementations.
-- Improving Fedora/Bazzite packaging metadata and validation.
+- Fedora/Bazzite testing.
+- PipeWire/WirePlumber compatibility fixes.
+- DSP tuning that stays real-time safe.
+- UI polish and accessibility.
+- Packaging metadata and AppImage validation.
 
 Before submitting a change:
 
 1. Build the project with CMake.
 2. Test enable/disable cycles with real playback.
-3. Confirm the previous default sink is restored after disable.
-4. Keep changes focused and explain user-visible behavior in the pull request.
+3. Confirm the previous default sink is restored after disable and quit.
+4. Confirm no stale PulseForge virtual sinks remain after restart.
+5. Keep changes focused and explain user-visible behavior.
 
-Please avoid adding external DSP plugin dependencies. PulseForge’s goal is to
-own its audio processing path in clean, maintainable C++.
+Please avoid external DSP plugin dependencies. PulseForge’s goal is to own its
+audio processing path in clean, maintainable C++.
+
+## Roadmap
+
+- Better alpha QA across Fedora, Bazzite, KDE, GNOME, and common USB devices.
+- Flatpak and RPM packaging after the AppImage path is stable.
+- More robust output stream recovery after device hotplug.
+- Improved loudness/gain staging and safer high-intensity presets.
+- Accessibility pass for keyboard navigation and screen readers.
+- Optional background/tray-first mode polish.
 
 ## Contributors
-
-PulseForge is maintained as a source-available, non-commercial Linux audio
-enhancement project.
 
 Project creator and maintainer:
 

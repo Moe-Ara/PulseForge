@@ -5,6 +5,7 @@
 #include <QGridLayout>
 #include <QLabel>
 #include <QObject>
+#include <QSizePolicy>
 #include <QSlider>
 #include <QSpinBox>
 #include <QStringList>
@@ -18,7 +19,8 @@ constexpr int kSliderMinimumDb = -12;
 constexpr int kSliderMaximumDb = 12;
 constexpr int kSliderTickIntervalDb = 6;
 constexpr int kSliderHeight = 150;
-constexpr int kBandColumnWidth = 66;
+constexpr int kBandColumnWidth = 72;
+constexpr int kEqualizerMinimumWidth = 770;
 
 class FrequencySpinBox : public QSpinBox {
 public:
@@ -59,6 +61,9 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
                     parent) {
   auto *equalizer = new QWidget(this);
   equalizer->setObjectName("equalizerPanel");
+  equalizer->setMinimumWidth(kEqualizerMinimumWidth);
+  equalizer->setSizePolicy(QSizePolicy::MinimumExpanding,
+                           QSizePolicy::Expanding);
 
   auto *layout = new QGridLayout(equalizer);
   layout->setContentsMargins(18, 16, 18, 14);
@@ -86,6 +91,7 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
     auto *gainLabel = new QLabel(QString("%1").arg(bandValue), this);
     gainLabel->setObjectName("gainLabel");
     gainLabel->setAlignment(Qt::AlignCenter);
+    gainLabel->setMinimumWidth(kBandColumnWidth);
 
     auto *slider = new QSlider(Qt::Vertical, this);
     slider->setObjectName("eqSlider");
@@ -94,6 +100,7 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
     slider->setTickPosition(QSlider::TicksBothSides);
     slider->setTickInterval(kSliderTickIntervalDb);
     slider->setFixedHeight(kSliderHeight);
+    slider->setMinimumWidth(kBandColumnWidth);
     sliders.push_back(slider);
 
     auto *frequencyInput = new FrequencySpinBox(this);
@@ -106,6 +113,7 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
     frequencyInput->setKeyboardTracking(false);
     frequencyInput->setAlignment(Qt::AlignCenter);
     frequencyInput->setValue(frequency);
+    frequencyInput->setMinimumWidth(kBandColumnWidth);
     frequencyInputs.push_back(frequencyInput);
 
     QObject::connect(slider, &QSlider::valueChanged, gainLabel,
@@ -130,6 +138,7 @@ EqualizerPanel::EqualizerPanel(QWidget *parent)
     layout->addWidget(slider, 1, i + 1, 3, 1, Qt::AlignHCenter);
     layout->addWidget(frequencyInput, 4, i + 1);
     layout->setColumnMinimumWidth(i + 1, kBandColumnWidth);
+    layout->setColumnStretch(i + 1, 1);
   }
 
   contentLayout()->addWidget(equalizer);

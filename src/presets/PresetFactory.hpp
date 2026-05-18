@@ -22,6 +22,9 @@ Preset movie();
 Preset voice();
 Preset bassBoost();
 Preset clarity();
+Preset competitiveFps();
+Preset warm();
+Preset bright();
 Preset equalizer(const std::vector<float> &gains);
 Preset equalizer(const std::vector<float> &gains,
                  const std::vector<float> &frequencies);

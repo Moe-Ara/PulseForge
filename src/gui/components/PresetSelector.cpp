@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QLabel>
 #include <QPushButton>
+#include <QSizePolicy>
 #include <QVBoxLayout>
 
 PresetSelector::PresetSelector(QWidget *parent) : QWidget(parent) {
@@ -17,9 +18,16 @@ PresetSelector::PresetSelector(QWidget *parent) : QWidget(parent) {
 
   presetComboBox = new QComboBox(this);
   presetComboBox->setObjectName("fieldCombo");
+  presetComboBox->setMinimumContentsLength(16);
+  presetComboBox->setSizeAdjustPolicy(
+      QComboBox::AdjustToMinimumContentsLengthWithIcon);
+  presetComboBox->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
 
   savePresetButton = new QPushButton("Save Current Preset", this);
   savePresetButton->setObjectName("secondaryButton");
+  savePresetButton->setMinimumWidth(180);
+  savePresetButton->setSizePolicy(QSizePolicy::MinimumExpanding,
+                                  QSizePolicy::Fixed);
 
   layout->addWidget(label);
   layout->addWidget(presetComboBox);
@@ -28,6 +36,8 @@ PresetSelector::PresetSelector(QWidget *parent) : QWidget(parent) {
 
 void PresetSelector::addPreset(const QString &name, const QString &id) {
   presetComboBox->addItem(name, id);
+  presetComboBox->setItemData(presetComboBox->count() - 1, name,
+                              Qt::ToolTipRole);
 }
 
 void PresetSelector::clearPresets() {

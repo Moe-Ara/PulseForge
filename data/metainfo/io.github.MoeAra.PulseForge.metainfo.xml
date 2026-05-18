@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>io.github.MoeAra.PulseForge</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>PolyForm-Noncommercial-1.0.0</project_license>
+  <name>PulseForge</name>
+  <summary>Native Linux audio enhancement app for PipeWire</summary>
+  <developer id="io.github.moeara">
+    <name>Moe Ara</name>
+  </developer>
+  <url type="homepage">https://github.com/Moe-Ara/PulseForge</url>
+  <url type="bugtracker">https://github.com/Moe-Ara/PulseForge/issues</url>
+  <url type="vcs-browser">https://github.com/Moe-Ara/PulseForge</url>
+  <description>
+    <p>
+      PulseForge is a lightweight Qt Widgets desktop app for Linux audio
+      enhancement on PipeWire systems. It creates a virtual audio sink, captures
+      that monitor stream, processes it in PulseForge's own C++ DSP engine, and
+      plays the result through the selected real output device.
+    </p>
+    <p>
+      The v0.1 alpha includes device selection, live presets, an equalizer,
+      limiter/compressor protection, tray support, and user-level systemd
+      start-on-login integration.
+    </p>
+  </description>
+  <launchable type="desktop-id">io.github.MoeAra.PulseForge.desktop</launchable>
+  <provides>
+    <binary>pulseforge</binary>
+  </provides>
+  <categories>
+    <category>Audio</category>
+    <category>AudioVideo</category>
+    <category>Utility</category>
+  </categories>
+  <screenshots>
+    <screenshot type="default">
+      <caption>PulseForge main window with equalizer and enhancement controls</caption>
+      <image>https://raw.githubusercontent.com/Moe-Ara/PulseForge/main/docs/screenshots/pulseforge-main.png</image>
+    </screenshot>
+  </screenshots>
+  <releases>
+    <release version="0.1.0-alpha" date="2026-05-18">
+      <description>
+        <p>Initial alpha release prepared for AppImage testing on Fedora and Bazzite.</p>
+      </description>
+    </release>
+  </releases>
+  <content_rating type="oars-1.1"/>
+</component>

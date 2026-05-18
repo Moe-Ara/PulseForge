@@ -15,6 +15,8 @@ public:
   bool unloadModule(int moduleId, const std::string &failureMessage) const;
   bool getDefaultSink(std::string &sinkName) const;
   bool setDefaultSink(const std::string &sinkName) const;
+  bool getDefaultSource(std::string &sourceName) const;
+  bool setDefaultSource(const std::string &sourceName) const;
   bool listModules(std::string &modules) const;
 
 private:

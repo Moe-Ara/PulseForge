@@ -319,6 +319,13 @@ void AudioProcessor::setEffectChain(const EffectChain &chain) {
                " ms. Limiter: " +
                std::string(limiterConfigured ? "preset" : "default") +
                " ceiling " + std::to_string(limiterCeilingDb) + " dB.");
+  Logger::info("AudioProcessor meter snapshot. Peak: " +
+               std::to_string(dynamics.recentPeakLinear()) +
+               ", limiter activations: " +
+               std::to_string(dynamics.limiterActivationCount()) +
+               ", clipped samples: " +
+               std::to_string(dynamics.clippedSampleCount()));
+  dynamics.resetMetering();
 }
 
 bool AudioProcessor::isRunning() const {
@@ -436,8 +443,8 @@ void AudioProcessor::processPlayback() {
 
 void AudioProcessor::writeProcessedSamples(const float *samples,
                                            std::size_t sampleCount) {
-  const float gain = gainLinear.load(std::memory_order_relaxed);
-  const float width = stereoWidth.load(std::memory_order_relaxed);
+  const float targetGain = gainLinear.load(std::memory_order_relaxed);
+  const float targetWidth = stereoWidth.load(std::memory_order_relaxed);
   const std::size_t totalFrames = sampleCount / AudioConfig::channelCount;
   std::size_t processedFrames = 0;
   const float currentSampleRate =
@@ -450,19 +457,24 @@ void AudioProcessor::writeProcessedSamples(const float *samples,
     for (std::size_t frame = 0; frame < frames; ++frame) {
       const std::size_t index =
           (processedFrames + frame) * AudioConfig::channelCount;
-      leftScratch[frame] = samples[index] * gain;
-      rightScratch[frame] = samples[index + 1] * gain;
+      smoothedGainLinear +=
+          (targetGain - smoothedGainLinear) * DspConfig::parameterSmoothing;
+      leftScratch[frame] = samples[index] * smoothedGainLinear;
+      rightScratch[frame] = samples[index + 1] * smoothedGainLinear;
     }
 
     equalizer.process(leftScratch.data(), rightScratch.data(),
                       static_cast<uint32_t>(frames));
 
-    if (std::abs(width - 1.0f) > 0.001f) {
+    if (std::abs(targetWidth - 1.0f) > 0.001f ||
+        std::abs(smoothedStereoWidth - 1.0f) > 0.001f) {
       for (std::size_t frame = 0; frame < frames; ++frame) {
+        smoothedStereoWidth +=
+            (targetWidth - smoothedStereoWidth) * DspConfig::parameterSmoothing;
         const float left = leftScratch[frame];
         const float right = rightScratch[frame];
         const float mid = (left + right) * 0.5f;
-        const float side = (left - right) * 0.5f * width;
+        const float side = (left - right) * 0.5f * smoothedStereoWidth;
         leftScratch[frame] = mid + side;
         rightScratch[frame] = mid - side;
       }
@@ -497,6 +509,8 @@ void AudioProcessor::readSamples(float *samples, std::size_t sampleCount) {
 
 void AudioProcessor::resetRingBuffer() {
   ringBuffer.clear();
+  smoothedGainLinear = gainLinear.load(std::memory_order_relaxed);
+  smoothedStereoWidth = stereoWidth.load(std::memory_order_relaxed);
   equalizer.reset();
   dynamics.reset();
 }
